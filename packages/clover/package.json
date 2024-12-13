@@ -31,7 +31,7 @@
     "@anatine/zod-openapi": "^1.12.1",
     "lodash.merge": "^4.6.2",
     "openapi3-ts": "^4.1.2",
-    "path-to-regexp": "^6.2.1",
+    "path-to-regexp": "^6.3.0",
     "zod": "^3.21.4"
   },
   "devDependencies": {
