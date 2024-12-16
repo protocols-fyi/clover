@@ -1,5 +1,11 @@
 # @sarim.garden/clover-docs
 
+## 2.0.0
+
+### Major Changes
+
+- 21ea1e0: Replaced nextra with fumadocs
+
 ## 1.2.1
 
 ### Patch Changes
