@@ -8,7 +8,39 @@ on:
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20.x
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install Dependencies
+        run: pnpm i
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-output
+          path: |
+            packages/*/dist
+            packages/*/build
+            packages/*/out
+          retention-days: 1
+
   release:
+    needs: build
     name: Release
     runs-on: ubuntu-latest
     permissions:
@@ -17,6 +49,8 @@ jobs:
       packages: write
       pull-requests: write
       issues: read
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v3
@@ -40,12 +74,47 @@ jobs:
       - name: Install Dependencies
         run: pnpm i
 
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: build-output
+          path: .
+
       - name: Create Release Pull Request or Publish to npm
         id: changesets
         uses: changesets/action@v1
         with:
-          # This expects you to have a script called release which does a build for your packages and calls changeset publish
           publish: pnpm release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  deploy-docs:
+    needs: [build, release]
+    name: Deploy Docs
+    runs-on: ubuntu-latest
+    if: needs.release.outputs.published == 'true'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: build-output
+          path: packages/docs/out
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/docs/out
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
