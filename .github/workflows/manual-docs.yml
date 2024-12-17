@@ -1,0 +1,46 @@
+name: Manual Docs Deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-docs:
+    name: Deploy Docs
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20.x
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install Dependencies
+        run: pnpm i
+
+      - name: Build Docs
+        run: pnpm --filter "@protocols-fyi/clover-docs" build
+        env:
+          NEXT_PUBLIC_BASE_PATH: '/${{ github.event.repository.name }}'
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/docs/out
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4 
