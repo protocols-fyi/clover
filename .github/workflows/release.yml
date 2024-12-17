@@ -93,7 +93,9 @@ jobs:
     needs: [build, release]
     name: Deploy Docs
     runs-on: ubuntu-latest
-    if: needs.release.outputs.published == 'true'
+    if: |
+      needs.release.outputs.published == 'true' ||
+      github.event.repository.has_pages == false
     permissions:
       pages: write
       id-token: write
