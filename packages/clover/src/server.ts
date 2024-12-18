@@ -79,9 +79,7 @@ export interface IMakeRequestHandlerProps<
      * @returns a helper to send the output
      */
     sendError: (
-      status: number,
-      message: string,
-      data?: Record<string, any>
+      {status, message, data}: {status: number } & ErrorResponse
     ) => Promise<Response>;
   }) => Promise<Response>;
 }
@@ -131,6 +129,12 @@ export interface IMakeRequestHandlerReturn<
    */
   handler: (request: Request) => Promise<Response>;
 }
+
+export const errorResponseSchema = z.object({
+  message: z.string(),
+  data: z.record(z.any()).optional()
+});
+export type ErrorResponse = z.infer<typeof errorResponseSchema>;
 
 export const makeRequestHandler = <
   TInput extends z.AnyZodObject,
@@ -273,9 +277,7 @@ export const makeRequestHandler = <
     };
 
     const sendError = async (
-      status: number,
-      message: string,
-      data?: Record<string, any>
+      {status, message, data}: {status: number } & ErrorResponse
     ) => {
       return new Response(
         JSON.stringify({ message, data }),

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeRequestHandler } from './server';
+import { errorResponseSchema, makeRequestHandler } from './server';
 import { z } from 'zod';
 
 describe('makeRequestHandler', () => {
@@ -205,7 +205,7 @@ describe('makeRequestHandler', () => {
       path: '/api/hello',
       
       run: async ({ sendError }) => {
-        return sendError(404, 'Not Found');
+        return sendError({ status: 404, message: 'Not Found' });
       }
     });
 
@@ -214,6 +214,47 @@ describe('makeRequestHandler', () => {
     );
 
     expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ message: 'Not Found' });
+  });
+
+  it('should allow an error response with data', async () => {
+    const { handler } = makeRequestHandler({
+      input: z.object({ name: z.string() }),
+      output: z.object({ greeting: z.string() }),
+      method: 'GET',
+      path: '/api/hello',
+      run: async ({ sendError }) => {
+        return sendError({ status: 404, message: 'Not Found', data: { foo: 'bar' } });
+      }
+    });
+
+    const response = await handler(
+      new Request('http://test.com/api/hello?name=test')
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ message: 'Not Found', data: { foo: 'bar' } });
+  });
+
+  it('should respond with an error response that is parsable by the errorResponseSchema', async () => {
+    const { handler } = makeRequestHandler({
+      input: z.object({ name: z.string() }),
+      output: z.object({ greeting: z.string() }),
+      method: 'GET',
+      path: '/api/hello',
+      run: async ({ sendError }) => {
+        return sendError({ status: 404, message: 'Not Found', data: { foo: 'bar' } });
+      }
+    });
+
+    const response = await handler(
+      new Request('http://test.com/api/hello?name=test')
+    );
+
+    // attempt to parse the response as an error response
+    const parsed = errorResponseSchema.safeParse(await response.json());
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toEqual({ message: 'Not Found', data: { foo: 'bar' } });
   });
 });
 
