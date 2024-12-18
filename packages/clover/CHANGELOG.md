@@ -1,5 +1,11 @@
 # @sarim.garden/clover
 
+## 2.3.0
+
+### Minor Changes
+
+- d309e57: Improve sendError to take an object rather than seperate parameters.
+
 ## 2.2.1
 
 ### Patch Changes
