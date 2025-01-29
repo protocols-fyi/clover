@@ -1,0 +1,54 @@
+# Logging
+
+Clover provides a flexible logging system that can be integrated with any logging library. By default, Clover uses a no-op logger that does nothing.
+
+## Setup
+
+```typescript
+import { setLogger, type LogLevel } from "@protocols-fyi/clover";
+
+// With Console
+setLogger({
+  log: (level: LogLevel, message: string, meta?: Record<string, any>) => {
+    console[level](message, meta);
+  }
+});
+
+// With Winston
+import winston from 'winston';
+const winstonLogger = winston.createLogger({/*config*/});
+setLogger({
+log: (level, message, meta) => winstonLogger.log(level, message, meta)
+});
+
+// Example with Pino
+import pino from 'pino';
+const pinoLogger = pino();
+setLogger({
+log: (level, message, meta) => pinoLogger[level]?.(meta, message)
+});
+```
+
+## Log Levels
+
+Clover uses these log levels:
+- `debug`: Detailed debugging information
+- `info`: General system operation
+- `warn`: Potential issues
+- `error`: Serious problems
+
+## Automatic Logging
+
+Clover logs the following events with these calls:
+
+```typescript
+// Request lifecycle
+log('debug', 'Handling request', { method, path });
+log('debug', 'Request handled successfully', { status });
+
+// Errors & Validation
+log('warn', 'Invalid input', { validationError });
+log('warn', 'Authentication failed', { path });
+log('warn', 'Method not allowed', { expectedMethod, actualMethod });
+log('error', 'Unexpected error handling request', { error });
+```
