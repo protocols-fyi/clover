@@ -1,5 +1,11 @@
 # @sarim.garden/clover
 
+## 2.3.1
+
+### Patch Changes
+
+- c02b2f5: Introduce new logger that can be swapped with a custom logger when using the package.
+
 ## 2.3.0
 
 ### Minor Changes
