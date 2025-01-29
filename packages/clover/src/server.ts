@@ -9,6 +9,7 @@ import {
   getParamsFromPath,
   httpMethodSupportsRequestBody,
 } from "./utils";
+import { getLogger, formatLogPayload } from './logger';
 
 export interface IMakeRequestHandlerProps<
   TInput extends z.AnyZodObject,
@@ -222,16 +223,29 @@ export const makeRequestHandler = <
   };
 
   const handler = async (request: Request) => {
+    const logger = getLogger();
     const requestForRun = request.clone();
     const requestForAuth = request.clone();
 
+    logger.log('debug', 'Handling request', {
+      method: request.method,
+      path: new URL(request.url).pathname,
+    });
+
     // ensure the method is correct
     if (request.method !== props.method) {
+      logger.log('warn', 'Method not allowed', {
+        expectedMethod: props.method,
+        actualMethod: request.method,
+      });
       return commonReponses[405].response();
     }
 
     // ensure authentication is correct
     if (props.authenticate && !(await props.authenticate(requestForAuth))) {
+      logger.log('warn', 'Authentication failed', {
+        path: new URL(request.url).pathname,
+      });
       return commonReponses[401].response();
     }
 
@@ -252,6 +266,9 @@ export const makeRequestHandler = <
 
     // if the input is invalid, return a 400
     if (!parsedData.success) {
+      logger.log('warn', 'Invalid input', {
+        validationError: parsedData.error,
+      });
       return commonReponses[400].response(parsedData.error);
     }
 
@@ -292,8 +309,22 @@ export const makeRequestHandler = <
 
     // run the user's code
     try {
-      return await props.run({ request: requestForRun, input, sendOutput, sendError });
+      const response = await props.run({ 
+        request: requestForRun, 
+        input, 
+        sendOutput, 
+        sendError 
+      });
+      
+      logger.log('debug', 'Request handled successfully', {
+        status: response.status,
+      });
+      
+      return response;
     } catch (error) {
+      logger.log('error', 'Unexpected error handling request', {
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
       return commonReponses[500].response(error);
     }
   };
