@@ -145,6 +145,12 @@ export const makeRequestHandler = <
 >(
   props: IMakeRequestHandlerProps<TInput, TOutput, TMethod, TPath>
 ): IMakeRequestHandlerReturn<TInput, TOutput, TMethod, TPath> => {
+  const getLoggingPrefix = (request: Request) => {
+    const url = new URL(request.url);
+    return `Handler ${request.method} ${url.pathname}`;
+  }
+
+
   const openAPIParameters: (oas31.ParameterObject | oas31.ReferenceObject)[] = [
     // query parameters
     ...(!httpMethodSupportsRequestBody[props.method]
@@ -227,24 +233,33 @@ export const makeRequestHandler = <
     const requestForRun = request.clone();
     const requestForAuth = request.clone();
 
-    logger.log('debug', 'Handling request', {
-      method: request.method,
-      path: new URL(request.url).pathname,
-    });
+    logger.log('debug', `${getLoggingPrefix(request)} begin`);
 
     // ensure the method is correct
     if (request.method !== props.method) {
-      logger.log('warn', 'Method not allowed', {
+      logger.log('warn', `${getLoggingPrefix(request)} invalid HTTP method: received ${request.method}, expected ${props.method}`, {
         expectedMethod: props.method,
         actualMethod: request.method,
+        url: request.url,
       });
       return commonReponses[405].response();
     }
 
+    let authenticationResult = false;
+
+    try {
+      authenticationResult = (props.authenticate !== undefined && !(await props.authenticate(requestForAuth)));
+    } catch (error) {
+      logger.log('error', `${getLoggingPrefix(request)} error during authentication check`, {
+        error: error instanceof Error ? error : new Error(String(error)),
+        url: request.url,
+      });
+    }
+
     // ensure authentication is correct
-    if (props.authenticate && !(await props.authenticate(requestForAuth))) {
-      logger.log('warn', 'Authentication failed', {
-        path: new URL(request.url).pathname,
+    if (authenticationResult) {
+      logger.log('debug', `${getLoggingPrefix(request)} authentication check returned false`, {
+        url: request.url,
       });
       return commonReponses[401].response();
     }
@@ -266,8 +281,10 @@ export const makeRequestHandler = <
 
     // if the input is invalid, return a 400
     if (!parsedData.success) {
-      logger.log('warn', 'Invalid input', {
+      logger.log('warn', `${getLoggingPrefix(request)} request validation failed`, {
         validationError: parsedData.error,
+        receivedInput: unsafeData,
+        url: request.url,
       });
       return commonReponses[400].response(parsedData.error);
     }
@@ -279,6 +296,7 @@ export const makeRequestHandler = <
       output: z.infer<TOutput>,
       options?: Partial<ResponseInit>
     ) => {
+      logger.log('debug', `${getLoggingPrefix(request)} success ${options?.status ?? 200}`);
       return new Response(
         JSON.stringify(output),
         merge(
@@ -296,6 +314,7 @@ export const makeRequestHandler = <
     const sendError = async (
       {status, message, data}: {status: number } & ErrorResponse
     ) => {
+      logger.log('debug', `${getLoggingPrefix(request)} error ${status}`);
       return new Response(
         JSON.stringify({ message, data }),
         {
@@ -316,14 +335,14 @@ export const makeRequestHandler = <
         sendError 
       });
       
-      logger.log('debug', 'Request handled successfully', {
-        status: response.status,
-      });
-      
+      logger.log('debug', `${getLoggingPrefix(request)} success ${response.status}`);
+        
       return response;
     } catch (error) {
-      logger.log('error', 'Unexpected error handling request', {
+      logger.log('error', `${getLoggingPrefix(request)} unhandled error when handling request`, {
         error: error instanceof Error ? error : new Error(String(error)),
+        input,
+        url: request.url,
       });
       return commonReponses[500].response(error);
     }

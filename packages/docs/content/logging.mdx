@@ -9,51 +9,120 @@ Clover provides a flexible logging system that can be integrated with any loggin
 
 ## Setup
 
-```typescript
-import { setLogger, type LogLevel } from "@protocols-fyi/clover";
+To configure logging, use the `setLogger` function to provide a logger implementation that matches the `ILogger` interface:
 
-// With Console
-setLogger({
+```typescript
+import { setLogger, type LogLevel, type ILogger } from "@protocols-fyi/clover";
+
+// Basic Console Logger
+const consoleLogger: ILogger = {
   log: (level: LogLevel, message: string, meta?: Record<string, any>) => {
     console[level](message, meta);
   }
-});
+};
+setLogger(consoleLogger);
 
 // With Winston
 import winston from 'winston';
 const winstonLogger = winston.createLogger({/*config*/});
-setLogger({
-log: (level, message, meta) => winstonLogger.log(level, message, meta)
-});
+const winstonAdapter: ILogger = {
+  log: (level, message, meta) => winstonLogger.log(level, message, meta)
+};
+setLogger(winstonAdapter);
 
-// Example with Pino
+// With Pino
 import pino from 'pino';
 const pinoLogger = pino();
-setLogger({
-log: (level, message, meta) => pinoLogger[level]?.(meta, message)
-});
+const pinoAdapter: ILogger = {
+  log: (level, message, meta) => pinoLogger[level]?.(meta, message)
+};
+setLogger(pinoAdapter);
 ```
 
 ## Log Levels
 
-Clover uses these log levels:
+Clover supports these standard log levels:
 - `debug`: Detailed debugging information
 - `info`: General system operation
-- `warn`: Potential issues
-- `error`: Serious problems
+- `warn`: Warning messages for potential issues
+- `error`: Error messages for serious problems
+
+## Logger Interface
+
+The logger interface is simple and flexible:
+
+```typescript
+type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+interface ILogger {
+  log: (level: LogLevel, message: string, meta?: Record<string, any>) => void;
+}
+```
+
+## Helper Functions
+
+Clover provides several helper functions for logging:
+
+```typescript
+// Get the current logger instance
+const logger = getLogger();
+
+// Format log payload with metadata
+const payload = formatLogPayload('info', 'Operation successful', { userId: '123' });
+// Result: { level: 'info', message: 'Operation successful', userId: '123' }
+```
+
+## Default Logger
+
+If no logger is set, Clover uses a no-op logger that silently discards all log messages. This ensures your application works even without logging configured, but you should set up proper logging for production use.
 
 ## Automatic Logging
 
-Clover logs the following events with these calls:
+Clover automatically logs important events during request processing. Here are the key logging points:
 
 ```typescript
-// Request lifecycle
-log('debug', 'Handling request', { method, path });
-log('debug', 'Request handled successfully', { status });
+// Request Lifecycle
+log('debug', `Handler ${method} ${path} begin`);
+log('debug', `Handler ${method} ${path} success ${statusCode}`);
 
-// Errors & Validation
-log('warn', 'Invalid input', { validationError });
-log('warn', 'Authentication failed', { path });
-log('warn', 'Method not allowed', { expectedMethod, actualMethod });
-log('error', 'Unexpected error handling request', { error });
+// Error Scenarios
+log('error', `Handler ${method} ${path} unhandled error when handling request`, {
+  error: Error,
+  input: Record<string, any>,
+  url: string
+});
+
+log('warn', `Handler ${method} ${path} request validation failed`, {
+  validationError: ZodError,
+  receivedInput: Record<string, any>,
+  url: string
+});
+
+// Authentication
+log('debug', `Handler ${method} ${path} authentication check returned false`, {
+  url: string
+});
+
+log('error', `Handler ${method} ${path} error during authentication check`, {
+  error: Error,
+  url: string
+});
+
+// Method Validation
+log('warn', `Handler ${method} ${path} invalid HTTP method: received ${actualMethod}, expected ${expectedMethod}`, {
+  expectedMethod: string,
+  actualMethod: string,
+  url: string
+});
+
+// Custom Send Error Responses
+log('debug', `Handler ${method} ${path} error ${statusCode}`);
 ```
+
+Each log entry includes contextual information to help with debugging and monitoring. The log levels are chosen to appropriately reflect the severity of each event:
+
+- `debug`: Used for routine operations like request start/completion and successful responses
+- `warn`: Used for expected errors like validation failures or incorrect HTTP methods
+- `error`: Used for unexpected errors like unhandled exceptions or authentication failures
+
+All log messages are prefixed with "Handler {METHOD} {PATH}" for consistent log filtering and searching.

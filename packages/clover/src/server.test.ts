@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { errorResponseSchema, makeRequestHandler } from './server';
-import { z } from 'zod';
+import { z, ZodError } from 'zod';
+import { setLogger } from './logger';
 
 describe('makeRequestHandler', () => {
   it('should create a handler that validates input', async () => {
@@ -255,6 +256,205 @@ describe('makeRequestHandler', () => {
     const parsed = errorResponseSchema.safeParse(await response.json());
     expect(parsed.success).toBe(true);
     expect(parsed.data).toEqual({ message: 'Not Found', data: { foo: 'bar' } });
+  });
+
+  describe('logging', () => {
+    let logs: { level: string, message: string, meta?: Record<string, any> }[] = [];
+
+    beforeEach(() => {
+      logs = [];
+
+      setLogger({
+        log: (level, message, meta) => {  
+          logs.push({ level, message, meta });
+        }
+      });
+    });
+
+    it('should log a debug message when the handler begins', async () => {
+      const { handler } = makeRequestHandler({
+        input: z.object({ name: z.string() }),
+        output: z.object({ greeting: z.string() }),
+        method: 'GET',
+        path: '/api/hello',
+        run: async ({ sendOutput }) => {
+          return sendOutput({ greeting: 'Hello, test!' });
+        }
+      });
+
+      await handler(new Request('http://test.com/api/hello?name=test'));
+
+      expect(logs?.[0]).toEqual({ level: 'debug', message: 'Handler GET /api/hello begin', meta: undefined });
+    });
+
+    it('should log a debug message when the request is successful', async () => {
+      const { handler } = makeRequestHandler({
+        input: z.object({ name: z.string() }),
+        output: z.object({ greeting: z.string() }),
+        method: 'GET',
+        path: '/api/hello',
+        run: async ({ sendOutput }) => {
+          return sendOutput({ greeting: 'Hello, test!' });
+        }
+      });
+
+      await handler(new Request('http://test.com/api/hello?name=test'));
+
+      expect(logs?.[1]).toEqual({ level: 'debug', message: 'Handler GET /api/hello success 200', meta: undefined });
+    });
+
+    it('should log a debug when the request is successful with a custom status code', async () => {
+      const { handler } = makeRequestHandler({
+        input: z.object({ name: z.string() }),
+        output: z.object({ greeting: z.string() }),
+        method: 'GET',
+        path: '/api/hello',
+        run: async ({ sendOutput }) => {
+          return sendOutput({ greeting: 'Hello, test!' }, { status: 201 });
+        }
+      });
+
+      await handler(new Request('http://test.com/api/hello?name=test'));
+
+      expect(logs?.[1]).toEqual({ level: 'debug', message: 'Handler GET /api/hello success 201', meta: undefined });
+    });
+
+    it('should log a debug message when the handler sends an error response', async () => {
+      const { handler } = makeRequestHandler({
+        input: z.object({ name: z.string() }),
+        output: z.object({ greeting: z.string() }),
+        method: 'GET',
+        path: '/api/hello',
+        run: async ({ sendError }) => {
+          return sendError({ status: 404, message: 'Not Found' });
+        }
+      });
+
+      await handler(new Request('http://test.com/api/hello?name=test'));
+
+      expect(logs?.[1]).toEqual({ level: 'debug', message: 'Handler GET /api/hello error 404', meta: undefined });
+    });
+
+    it('should log an error 500 error', async () => {
+      const { handler } = makeRequestHandler({
+        input: z.object({ name: z.string() }),
+        output: z.object({ greeting: z.string() }),
+        method: 'GET',
+        path: '/api/hello',
+        run: async () => {
+          throw new Error('test');
+        }
+      });
+
+      await handler(new Request('http://test.com/api/hello?name=test'));
+
+      expect(logs?.[1]).toEqual({ 
+        level: 'error', 
+        message: 'Handler GET /api/hello unhandled error when handling request', 
+        meta: { 
+          error: expect.any(Error),
+          input: { name: 'test' },
+          url: 'http://test.com/api/hello?name=test'
+        } 
+      });
+    });
+
+    it('should log a warning message when the method is not allowed', async () => {
+      const { handler } = makeRequestHandler({
+        input: z.object({ name: z.string() }),
+        output: z.object({ greeting: z.string() }),
+        method: 'GET',
+        path: '/api/hello',
+        run: async ({ sendOutput }) => {
+          return sendOutput({ greeting: 'Hello, test!' });
+        }
+      });
+
+      await handler(new Request('http://test.com/api/hello', { method: 'POST' }));
+
+      expect(logs?.[1]).toEqual({ 
+        level: 'warn', 
+        message: 'Handler POST /api/hello invalid HTTP method: received POST, expected GET', 
+        meta: {
+          expectedMethod: 'GET',
+          actualMethod: 'POST',
+          url: 'http://test.com/api/hello'
+        } 
+      });
+    });
+
+    it('should log a debug message when the authentication returns false', async () => {
+      const { handler } = makeRequestHandler({
+        input: z.object({ name: z.string() }),
+        output: z.object({ greeting: z.string() }),
+        method: 'GET',
+        path: '/api/hello',
+        authenticate: async () => false,
+        run: async ({ sendOutput }) => {
+          return sendOutput({ greeting: 'Hello, test!' });
+        }
+      });
+
+      await handler(new Request('http://test.com/api/hello?name=test'));
+
+      expect(logs?.[1]).toEqual({ 
+        level: 'debug', 
+        message: 'Handler GET /api/hello authentication check returned false', 
+        meta: {
+          url: 'http://test.com/api/hello?name=test'
+        } 
+      });
+    });
+
+    it('should log an error when there is an unexpected error authenticating the user', async () => {
+      const { handler } = makeRequestHandler({
+        input: z.object({ name: z.string() }),
+        output: z.object({ greeting: z.string() }),
+        method: 'GET',
+        path: '/api/hello',
+        authenticate: async () => {
+          throw new Error('test');
+        },
+        run: async ({ sendOutput }) => {
+          return sendOutput({ greeting: 'Hello, test!' });
+        }
+      });
+
+      await handler(new Request('http://test.com/api/hello?name=test'));
+
+      expect(logs?.[1]).toEqual({ 
+        level: 'error', 
+        message: 'Handler GET /api/hello error during authentication check', 
+        meta: { 
+          error: expect.any(Error),
+          url: 'http://test.com/api/hello?name=test'
+        } 
+      });
+    });
+
+    it('should log a warning message when the handler has a validation error', async () => {
+      const { handler } = makeRequestHandler({
+        input: z.object({ name: z.string() }),
+        output: z.object({ greeting: z.string() }),
+        method: 'GET',
+        path: '/api/hello',
+        run: async ({ sendOutput }) => {
+          return sendOutput({ greeting: 'Hello, test!' });
+        }
+      });
+
+      await handler(new Request('http://test.com/api/hello'));
+
+      expect(logs?.[1]).toEqual({ 
+        level: 'warn', 
+        message: 'Handler GET /api/hello request validation failed', 
+        meta: {
+          validationError: expect.any(ZodError),
+          receivedInput: {},
+          url: 'http://test.com/api/hello'
+        } 
+      });
+    });
   });
 });
 
