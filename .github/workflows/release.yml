@@ -27,6 +27,8 @@ jobs:
         run: pnpm i
 
       - name: Build packages
+        env:
+          NEXT_PUBLIC_BASE_PATH: '/${{ github.event.repository.name }}'
         run: pnpm build
 
       - name: Upload build artifacts
