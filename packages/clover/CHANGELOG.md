@@ -1,5 +1,11 @@
 # @sarim.garden/clover
 
+## 2.3.3
+
+### Patch Changes
+
+- 7cf8932: Fix broken build release. Update docs to fix issues with docs build.
+
 ## 2.3.2
 
 ### Patch Changes
