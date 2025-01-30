@@ -1,5 +1,11 @@
 # @sarim.garden/clover
 
+## 2.3.4
+
+### Patch Changes
+
+- 5f36cdc: Patch versions to trigger build because of broken actions workflow.
+
 ## 2.3.3
 
 ### Patch Changes
