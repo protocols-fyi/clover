@@ -1,5 +1,11 @@
 # @sarim.garden/clover
 
+## 2.3.2
+
+### Patch Changes
+
+- 40a16b8: Improve error logging. Add request path and method prefixes to server logs for better traceability. Enhance error descriptions to facilitate debugging.
+
 ## 2.3.1
 
 ### Patch Changes
