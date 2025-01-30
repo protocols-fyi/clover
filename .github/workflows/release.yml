@@ -34,9 +34,8 @@ jobs:
         with:
           name: build-output
           path: |
-            packages/*/dist
-            packages/*/build
-            packages/*/out
+            packages/docs/out
+            packages/clover/dist
           retention-days: 1
 
   release:
@@ -78,7 +77,23 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-output
-          path: .
+          path: /tmp/build-output
+
+      - name: Copy build artifacts to root
+        run: |
+          mkdir -p packages/docs/out
+          cp -r /tmp/build-output/docs/out/* packages/docs/out
+
+          mkdir -p packages/clover/dist
+          cp -r /tmp/build-output/clover/dist/* packages/clover/dist
+        
+      - name: Verify artifact contents
+        run: |
+          echo "Contents of packages/docs/out:"
+          ls -R packages/docs/out
+          
+          echo "\nContents of packages/clover/dist:"
+          ls -R packages/clover/dist
 
       - name: Create Release Pull Request or Publish to npm
         id: changesets
@@ -107,15 +122,15 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-output
-          path: packages/docs/out
+          path: /tmp/build-output
 
       - name: Configure Pages
         uses: actions/configure-pages@v4
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
-          path: packages/docs/out
+          path: /tmp/build-output/docs/out
 
       - name: Deploy to GitHub Pages
         id: deployment
