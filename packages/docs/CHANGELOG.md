@@ -1,5 +1,11 @@
 # @sarim.garden/clover-docs
 
+## 2.0.5
+
+### Patch Changes
+
+- bb94bca: Fix images in docs not loading
+
 ## 2.0.4
 
 ### Patch Changes
