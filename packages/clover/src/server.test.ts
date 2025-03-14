@@ -99,6 +99,61 @@ describe('makeRequestHandler', () => {
     expect(data).toEqual({ greeting: 'Hello, test!' });
   });
 
+  it('should return a 400 error when the method is a post and the body is not JSON', async () => {
+    const { handler } = makeRequestHandler({
+      input: z.object({ name: z.string() }),
+      output: z.object({ greeting: z.string() }),
+      method: 'POST',
+      path: '/api/hello',
+      run: async ({ input, sendOutput }) => {
+        return sendOutput({ greeting: `Hello, ${input.name}!` });
+      }
+    });
+
+    const response = await handler(
+      new Request('http://test.com/api/hello', { method: 'POST', body: 'not-json' })
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it('should allow for non-json request bodies if the input schema is an empty object', async () => {
+    const { handler } = makeRequestHandler({
+      input: z.object({}),
+      output: z.object({ input: z.any() }),
+      method: 'POST',
+      path: '/api/hello',
+      run: async ({ input, sendOutput }) => {
+        return sendOutput({ input });
+      }
+    });
+
+    const response = await handler(
+      new Request('http://test.com/api/hello', { method: 'POST', body: 'not-json' })
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  it('should allow for json request bodies if the input schema is an empty object', async () => {
+    const { handler } = makeRequestHandler({
+      input: z.object({ }),
+      output: z.object({ input: z.any() }),
+      method: 'POST',
+      path: '/api/hello',
+      run: async ({ input, sendOutput }) => {
+        return sendOutput({ input });
+      }
+    });
+
+    const response = await handler(
+      new Request('http://test.com/api/hello', { method: 'POST', body: JSON.stringify({ name: 'test' }) })
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ input: { } });
+  });
+
   it('should return a 405 if the method is not supported', async () => {
     const { handler } = makeRequestHandler({
       input: z.object({ name: z.string() }),
@@ -455,6 +510,92 @@ describe('makeRequestHandler', () => {
         } 
       });
     });
+  });
+
+  describe('openAPIPathsObject', () => {
+    it('should generate correct OpenAPI schema', () => {
+      const { openAPIPathsObject } = makeRequestHandler({
+        input: z.object({ name: z.string() }),
+        output: z.object({ greeting: z.string() }),
+        method: 'GET',
+        path: '/api/hello',
+        run: async ({ input, sendOutput }) => {
+          return sendOutput({ greeting: `Hello, ${input.name}!` });
+        }
+      });
+
+      expect(openAPIPathsObject).toEqual({
+        '/api/hello': {
+          get: {
+            description: undefined,
+            security: undefined,
+            parameters: [
+              {
+                name: 'name',
+                in: 'query',
+                schema: { type: 'string' }
+              }
+            ],
+            requestBody: undefined,
+            responses: {
+              200: {
+                description: 'Success',
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      properties: {
+                        greeting: { type: 'string' }
+                      },
+                      required: ['greeting']
+                    }
+                  }
+                }
+              },
+              400: expect.any(Object),
+              401: undefined
+            },
+            tags: undefined
+          }
+        }
+      });
+    });
+  });
+
+  it('should return 400 for missing required fields', async () => {
+    const { handler } = makeRequestHandler({
+      input: z.object({ name: z.string(), age: z.number() }),
+      output: z.object({ greeting: z.string() }),
+      method: 'GET',
+      path: '/api/hello',
+      run: async ({ input, sendOutput }) => {
+        return sendOutput({ greeting: `Hello, ${input.name}!` });
+      }
+    });
+
+    const response = await handler(
+      new Request('http://test.com/api/hello?name=test')
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it('should return 400 for invalid data types', async () => {
+    const { handler } = makeRequestHandler({
+      input: z.object({ name: z.string(), age: z.number() }),
+      output: z.object({ greeting: z.string() }),
+      method: 'GET',
+      path: '/api/hello',
+      run: async ({ input, sendOutput }) => {
+        return sendOutput({ greeting: `Hello, ${input.name}!` });
+      }
+    });
+
+    const response = await handler(
+      new Request('http://test.com/api/hello?name=test&age=not-a-number')
+    );
+
+    expect(response.status).toBe(400);
   });
 });
 

@@ -271,7 +271,14 @@ export const makeRequestHandler = <
       // parse input from query parameters or body
       ...(httpMethodSupportsRequestBody[request.method as HTTPMethod]
         ? // if the method supports a body, parse it
-          await request.json()
+          await request.json().catch((error) => {
+            logger.log('warn', `${getLoggingPrefix(request)} error parsing request body`, {
+              error: error instanceof Error ? error : new Error(String(error)),
+              url: request.url,
+            });
+            // Just return an empty object if the body is not valid JSON
+            return {};
+          })
         : // otherwise, parse the query parameters
           Object.fromEntries(new URL(request.url).searchParams.entries())),
     };
