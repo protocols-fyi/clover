@@ -1,5 +1,11 @@
 # @sarim.garden/clover
 
+## 2.4.1
+
+### Patch Changes
+
+- Removed security field to fix Swagger errors.
+
 ## 2.4.0
 
 ### Minor Changes
