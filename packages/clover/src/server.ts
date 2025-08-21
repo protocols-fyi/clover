@@ -1,14 +1,14 @@
-import { generateSchema } from "@anatine/zod-openapi";
-import merge from "lodash.merge";
-import { oas31 } from "openapi3-ts";
-import { z } from "zod";
-import { commonReponses } from "./responses";
+import { generateSchema } from '@anatine/zod-openapi';
+import merge from 'lodash.merge';
+import { oas31 } from 'openapi3-ts';
+import { z } from 'zod';
+import { commonReponses } from './responses';
 import {
   HTTPMethod,
   getKeysFromPathPattern,
   getParamsFromPath,
   httpMethodSupportsRequestBody,
-} from "./utils";
+} from './utils';
 import { getLogger, formatLogPayload } from './logger';
 
 export interface IMakeRequestHandlerProps<
@@ -79,9 +79,11 @@ export interface IMakeRequestHandlerProps<
      * @param data - any additional data
      * @returns a helper to send the output
      */
-    sendError: (
-      {status, message, data}: {status: number } & ErrorResponse
-    ) => Promise<Response>;
+    sendError: ({
+      status,
+      message,
+      data,
+    }: { status: number } & ErrorResponse) => Promise<Response>;
   }) => Promise<Response>;
 }
 
@@ -133,7 +135,7 @@ export interface IMakeRequestHandlerReturn<
 
 export const errorResponseSchema = z.object({
   message: z.string(),
-  data: z.record(z.any()).optional()
+  data: z.record(z.any()).optional(),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;
 
@@ -148,8 +150,7 @@ export const makeRequestHandler = <
   const getLoggingPrefix = (request: Request) => {
     const url = new URL(request.url);
     return `Handler ${request.method} ${url.pathname}`;
-  }
-
+  };
 
   const openAPIParameters: (oas31.ParameterObject | oas31.ReferenceObject)[] = [
     // query parameters
@@ -164,9 +165,9 @@ export const makeRequestHandler = <
           .map((key) => {
             return {
               name: key,
-              in: "query" as oas31.ParameterLocation,
+              in: 'query' as oas31.ParameterLocation,
               schema: {
-                type: "string" as oas31.SchemaObjectType,
+                type: 'string' as oas31.SchemaObjectType,
               },
             };
           })
@@ -174,10 +175,10 @@ export const makeRequestHandler = <
     // add path parameters
     ...getKeysFromPathPattern(props.path).map((key) => ({
       name: String(key.name),
-      in: "path" as oas31.ParameterLocation,
+      in: 'path' as oas31.ParameterLocation,
       required: true,
       schema: {
-        type: "string" as oas31.SchemaObjectType,
+        type: 'string' as oas31.SchemaObjectType,
       },
     })),
   ];
@@ -188,7 +189,7 @@ export const makeRequestHandler = <
     | undefined = httpMethodSupportsRequestBody[props.method]
     ? {
         content: {
-          "application/json": {
+          'application/json': {
             schema: generateSchema(props.input),
           },
         },
@@ -197,15 +198,14 @@ export const makeRequestHandler = <
 
   const openAPIOperation: oas31.OperationObject = {
     description: props.description,
-    security: props.authenticate ? [{ bearerAuth: [] }] : undefined,
     parameters: openAPIParameters,
     requestBody: openAPIRequestBody,
     responses: {
       // success
       200: {
-        description: "Success",
+        description: 'Success',
         content: {
-          "application/json": {
+          'application/json': {
             schema: generateSchema(props.output),
           },
         },
@@ -237,30 +237,46 @@ export const makeRequestHandler = <
 
     // ensure the method is correct
     if (request.method !== props.method) {
-      logger.log('warn', `${getLoggingPrefix(request)} invalid HTTP method: received ${request.method}, expected ${props.method}`, {
-        expectedMethod: props.method,
-        actualMethod: request.method,
-        url: request.url,
-      });
+      logger.log(
+        'warn',
+        `${getLoggingPrefix(request)} invalid HTTP method: received ${
+          request.method
+        }, expected ${props.method}`,
+        {
+          expectedMethod: props.method,
+          actualMethod: request.method,
+          url: request.url,
+        }
+      );
       return commonReponses[405].response();
     }
 
     let authenticationResult = false;
 
     try {
-      authenticationResult = (props.authenticate !== undefined && !(await props.authenticate(requestForAuth)));
+      authenticationResult =
+        props.authenticate !== undefined &&
+        !(await props.authenticate(requestForAuth));
     } catch (error) {
-      logger.log('error', `${getLoggingPrefix(request)} error during authentication check`, {
-        error: error instanceof Error ? error : new Error(String(error)),
-        url: request.url,
-      });
+      logger.log(
+        'error',
+        `${getLoggingPrefix(request)} error during authentication check`,
+        {
+          error: error instanceof Error ? error : new Error(String(error)),
+          url: request.url,
+        }
+      );
     }
 
     // ensure authentication is correct
     if (authenticationResult) {
-      logger.log('debug', `${getLoggingPrefix(request)} authentication check returned false`, {
-        url: request.url,
-      });
+      logger.log(
+        'debug',
+        `${getLoggingPrefix(request)} authentication check returned false`,
+        {
+          url: request.url,
+        }
+      );
       return commonReponses[401].response();
     }
 
@@ -272,10 +288,15 @@ export const makeRequestHandler = <
       ...(httpMethodSupportsRequestBody[request.method as HTTPMethod]
         ? // if the method supports a body, parse it
           await request.json().catch((error) => {
-            logger.log('warn', `${getLoggingPrefix(request)} error parsing request body`, {
-              error: error instanceof Error ? error : new Error(String(error)),
-              url: request.url,
-            });
+            logger.log(
+              'warn',
+              `${getLoggingPrefix(request)} error parsing request body`,
+              {
+                error:
+                  error instanceof Error ? error : new Error(String(error)),
+                url: request.url,
+              }
+            );
             // Just return an empty object if the body is not valid JSON
             return {};
           })
@@ -288,11 +309,15 @@ export const makeRequestHandler = <
 
     // if the input is invalid, return a 400
     if (!parsedData.success) {
-      logger.log('warn', `${getLoggingPrefix(request)} request validation failed`, {
-        validationError: parsedData.error,
-        receivedInput: unsafeData,
-        url: request.url,
-      });
+      logger.log(
+        'warn',
+        `${getLoggingPrefix(request)} request validation failed`,
+        {
+          validationError: parsedData.error,
+          receivedInput: unsafeData,
+          url: request.url,
+        }
+      );
       return commonReponses[400].response(parsedData.error);
     }
 
@@ -303,14 +328,17 @@ export const makeRequestHandler = <
       output: z.infer<TOutput>,
       options?: Partial<ResponseInit>
     ) => {
-      logger.log('debug', `${getLoggingPrefix(request)} success ${options?.status ?? 200}`);
+      logger.log(
+        'debug',
+        `${getLoggingPrefix(request)} success ${options?.status ?? 200}`
+      );
       return new Response(
         JSON.stringify(output),
         merge(
           {
             status: 200,
             headers: {
-              "Content-Type": "application/json",
+              'Content-Type': 'application/json',
             },
           },
           options
@@ -318,39 +346,45 @@ export const makeRequestHandler = <
       );
     };
 
-    const sendError = async (
-      {status, message, data}: {status: number } & ErrorResponse
-    ) => {
+    const sendError = async ({
+      status,
+      message,
+      data,
+    }: { status: number } & ErrorResponse) => {
       logger.log('debug', `${getLoggingPrefix(request)} error ${status}`);
-      return new Response(
-        JSON.stringify({ message, data }),
-        {
-          status,
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-    }
+      return new Response(JSON.stringify({ message, data }), {
+        status,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+    };
 
     // run the user's code
     try {
-      const response = await props.run({ 
-        request: requestForRun, 
-        input, 
-        sendOutput, 
-        sendError 
+      const response = await props.run({
+        request: requestForRun,
+        input,
+        sendOutput,
+        sendError,
       });
-      
-      logger.log('debug', `${getLoggingPrefix(request)} success ${response.status}`);
-        
+
+      logger.log(
+        'debug',
+        `${getLoggingPrefix(request)} success ${response.status}`
+      );
+
       return response;
     } catch (error) {
-      logger.log('error', `${getLoggingPrefix(request)} unhandled error when handling request`, {
-        error: error instanceof Error ? error : new Error(String(error)),
-        input,
-        url: request.url,
-      });
+      logger.log(
+        'error',
+        `${getLoggingPrefix(request)} unhandled error when handling request`,
+        {
+          error: error instanceof Error ? error : new Error(String(error)),
+          input,
+          url: request.url,
+        }
+      );
       return commonReponses[500].response(error);
     }
   };
