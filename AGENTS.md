@@ -1,5 +1,18 @@
 # Clover Agent Documentation
 
+## ⚠️ CRITICAL: Repository Information
+
+**PRIMARY REPOSITORY**: `protocols-fyi/clover`
+
+This is the ONLY repository where PRs should be opened. The git remotes are:
+- `origin` → `git@github.com:protocols-fyi/clover.git` ✅ (CORRECT - use this)
+- `upstream` → `git@github.com:sarimabbas/clover.git` ❌ (DO NOT use for PRs)
+
+**MANDATORY PR CREATION PROCESS**:
+1. ALWAYS verify repository: `gh repo view --json nameWithOwner`
+2. ALWAYS use explicit repo flag: `gh pr create --repo protocols-fyi/clover`
+3. NEVER rely on `gh pr create` auto-detection
+
 ## Project Overview
 
 TypeScript library for type-safe, self-documenting APIs using Zod + OpenAPI. WinterCG-compatible handlers: `(request: Request) => Promise<Response>`.
