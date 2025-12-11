@@ -42,7 +42,7 @@
     "@types/lodash.merge": "^4.6.9",
     "@vitest/coverage-v8": "^4.0.15",
     "@vitest/ui": "^4.0.15",
-    "eslint": "^8.57.1",
+    "eslint": "^9.39.1",
     "tsup": "^8.5.1",
     "typescript": "^5.7.2",
     "vitest": "^4.0.15"
