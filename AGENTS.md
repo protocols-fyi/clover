@@ -4,10 +4,20 @@
 
 **PRIMARY REPOSITORY**: `protocols-fyi/clover`
 
-This is the ONLY repository where PRs should be opened. The git remotes are:
+This is the ONLY repository where PRs should be opened.
 
-- `origin` → `git@github.com:protocols-fyi/clover.git` ✅ (CORRECT - use this)
-- `upstream` → `git@github.com:sarimabbas/clover.git` ❌ (DO NOT use for PRs)
+**CORRECT GIT REMOTE SETUP**:
+
+```bash
+origin → git@github.com:protocols-fyi/clover.git ✅
+```
+
+If you have other remotes pointing to personal forks, remove them to avoid confusion:
+
+```bash
+git remote remove upstream  # or any other confusing remotes
+gh repo set-default protocols-fyi/clover
+```
 
 **MANDATORY PR CREATION PROCESS**:
 
