@@ -34,6 +34,7 @@ pnpm build && pnpm test
 ```
 
 This ensures:
+
 - All packages build successfully (clover + docs)
 - All 34 tests pass
 - No build-time errors are pushed to remote
