@@ -14,4 +14,9 @@ Security updates:
 
 - Update vitest from 1.6.0 to 4.0.15 (fixes critical RCE vulnerability)
 - Update Next.js from 15.1.0 to 15.5.7 (fixes critical authorization bypass and RCE vulnerabilities)
-- Resolve all critical security vulnerabilities (3 critical → 0 critical)
+- Update @changesets/cli from 2.27.10 to 2.29.8 (fixes @babel/runtime, js-yaml, tmp vulnerabilities)
+- Update eslint from 7.32.0/8.57.1 to 9.39.1 across all packages (fixes js-yaml prototype pollution)
+- Update tsup from 7.2.0 to 8.5.1 (fixes glob CLI injection and esbuild vulnerabilities)
+- Update fumadocs packages to v14.7.7 (fixes image-size DoS vulnerability)
+- Resolved all critical and high-severity vulnerabilities (3 critical + 3 high → 0 critical + 0 high)
+- Remaining: 2 low-severity ReDoS issues in brace-expansion (transitive dev dependencies)
