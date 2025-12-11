@@ -25,6 +25,21 @@ gh repo set-default protocols-fyi/clover
 2. ALWAYS use explicit repo flag: `gh pr create --repo protocols-fyi/clover`
 3. NEVER rely on `gh pr create` auto-detection
 
+**MANDATORY PRE-PUSH CHECKLIST**:
+
+Before pushing any commits, you MUST verify the build works:
+
+```bash
+pnpm build && pnpm test
+```
+
+This ensures:
+- All packages build successfully (clover + docs)
+- All 34 tests pass
+- No build-time errors are pushed to remote
+
+**NEVER** push commits without verifying the build first.
+
 ## Project Overview
 
 TypeScript library for type-safe, self-documenting APIs using Zod + OpenAPI. WinterCG-compatible handlers: `(request: Request) => Promise<Response>`.
