@@ -16,8 +16,14 @@
       "require": "./dist/index.cjs"
     }
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/protocols-fyi/clover.git",
+    "directory": "packages/clover"
+  },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "build": "tsup --config ./tsup.config.ts",
