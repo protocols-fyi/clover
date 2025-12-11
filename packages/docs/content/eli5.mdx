@@ -268,7 +268,7 @@ The rest of the documentation will provide more details about how Clover works e
 
 ### Runtime typesafety with Zod
 
-Just having TypeScript types (either inferred from server code or generated from an OpenAPI spec) doesn't gurarantee type-safety over the wire during runtime. What if there was a cosmic bitflip ☀️💀 when the data was enroute from the server to the client? To gurarantee type-safety, it's generally a good idea to use a schema validation library like Zod, which is what you see with all the `z.object` stuff in the code examples above. You can learn more about Zod at https://github.com/colinhacks/zod.
+Just having TypeScript types (either inferred from server code or generated from an OpenAPI spec) doesn't guarantee type-safety over the wire during runtime. What if there was a cosmic bitflip ☀️💀 when the data was enroute from the server to the client? To guarantee type-safety, it's generally a good idea to use a schema validation library like Zod, which is what you see with all the `z.object` stuff in the code examples above. You can learn more about Zod at https://github.com/colinhacks/zod.
 
 ```ts
 // an example from Zod's documentation
