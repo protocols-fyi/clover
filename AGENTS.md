@@ -8,17 +8,17 @@ TypeScript library for type-safe, self-documenting APIs using Zod + OpenAPI. Win
 
 ## Tech Stack
 
-| Package              | Purpose                            |
-| -------------------- | ---------------------------------- |
-| Zod                  | Schema validation + type inference |
-| @anatine/zod-openapi | Zod → OpenAPI conversion           |
-| openapi3-ts          | OpenAPI types                      |
-| path-to-regexp       | Path parameter extraction          |
-| lodash.merge         | Response options merging           |
-| tsup                 | Dual-format bundler (ESM + CJS)    |
-| Vitest               | Testing                            |
-| Turbo                | Monorepo orchestration             |
-| Changesets           | Versioning                         |
+| Package        | Purpose                            |
+| -------------- | ---------------------------------- |
+| Zod            | Schema validation + type inference |
+| zod-openapi    | Zod → OpenAPI conversion           |
+| openapi3-ts    | OpenAPI types                      |
+| path-to-regexp | Path parameter extraction          |
+| lodash.merge   | Response options merging           |
+| tsup           | Dual-format bundler (ESM + CJS)    |
+| Vitest         | Testing                            |
+| Turbo          | Monorepo orchestration             |
+| Changesets     | Versioning                         |
 
 ## Project Structure
 
