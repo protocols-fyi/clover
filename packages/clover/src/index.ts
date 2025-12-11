@@ -9,8 +9,4 @@ export type {
   OpenAPIPathsObject,
   OpenAPIPathItemObject,
 } from "./utils";
-export {
-  setLogger,
-  type ILogger,
-  type LogLevel,
-} from "./logger";
+export { setLogger, type ILogger, type LogLevel } from "./logger";

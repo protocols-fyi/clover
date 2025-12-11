@@ -1,6 +1,10 @@
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LogLevel = "debug" | "info" | "warn" | "error";
 
-export type LogMethod = (level: LogLevel, message: string, meta?: Record<string, any>) => void;
+export type LogMethod = (
+  level: LogLevel,
+  message: string,
+  meta?: Record<string, any>
+) => void;
 
 export interface ILogger {
   log: LogMethod;
@@ -20,8 +24,12 @@ export const setLogger = (logger: ILogger) => {
 export const getLogger = () => globalLogger;
 
 // Helper to normalize logging calls
-export const formatLogPayload = (level: LogLevel, message: string, meta?: Record<string, any>) => ({
+export const formatLogPayload = (
+  level: LogLevel,
+  message: string,
+  meta?: Record<string, any>
+) => ({
   level,
   message,
-  ...(meta || {})
-}); 
+  ...(meta || {}),
+});

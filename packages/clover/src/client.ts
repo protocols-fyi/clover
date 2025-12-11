@@ -27,8 +27,8 @@ export const makeFetcher = (outerProps: IMakeFetcherProps) => {
    */
   const fetcher = async <
     TConfig extends IClientConfig<
-      z.AnyZodObject,
-      z.AnyZodObject,
+      z.ZodObject<any>,
+      z.ZodObject<any>,
       HTTPMethod,
       string
     >
@@ -49,7 +49,9 @@ export const makeFetcher = (outerProps: IMakeFetcherProps) => {
       // otherwise, send as query params
       httpMethodSupportsRequestBody[props.method]
         ? url
-        : new URL(url.toString() + "?" + new URLSearchParams(props.input)),
+        : new URL(
+            url.toString() + "?" + new URLSearchParams(props.input as any)
+          ),
       {
         method: props.method,
         headers: {
