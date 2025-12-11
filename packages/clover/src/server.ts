@@ -12,8 +12,8 @@ import {
 import { getLogger, formatLogPayload } from "./logger";
 
 export interface IMakeRequestHandlerProps<
-  TInput extends z.ZodObject<any>,
-  TOutput extends z.ZodObject<any>,
+  TInput extends z.ZodObject<any, any>,
+  TOutput extends z.ZodObject<any, any>,
   TMethod extends HTTPMethod,
   TPath extends string
 > {
@@ -88,8 +88,8 @@ export interface IMakeRequestHandlerProps<
 }
 
 export interface IClientConfig<
-  TInput extends z.ZodObject<any>,
-  TOutput extends z.ZodObject<any>,
+  TInput extends z.ZodObject<any, any>,
+  TOutput extends z.ZodObject<any, any>,
   TMethod extends HTTPMethod,
   TPath extends string
 > {
@@ -114,8 +114,8 @@ export interface IClientConfig<
 }
 
 export interface IMakeRequestHandlerReturn<
-  TInput extends z.ZodObject<any>,
-  TOutput extends z.ZodObject<any>,
+  TInput extends z.ZodObject<any, any>,
+  TOutput extends z.ZodObject<any, any>,
   TMethod extends HTTPMethod,
   TPath extends string
 > {
@@ -140,8 +140,8 @@ export const errorResponseSchema = z.object({
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;
 
 export const makeRequestHandler = <
-  TInput extends z.ZodObject<any>,
-  TOutput extends z.ZodObject<any>,
+  TInput extends z.ZodObject<any, any>,
+  TOutput extends z.ZodObject<any, any>,
   TMethod extends HTTPMethod,
   TPath extends string
 >(

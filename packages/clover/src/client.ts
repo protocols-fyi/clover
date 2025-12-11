@@ -27,8 +27,8 @@ export const makeFetcher = (outerProps: IMakeFetcherProps) => {
    */
   const fetcher = async <
     TConfig extends IClientConfig<
-      z.ZodObject<any>,
-      z.ZodObject<any>,
+      z.ZodObject<any, any>,
+      z.ZodObject<any, any>,
       HTTPMethod,
       string
     >

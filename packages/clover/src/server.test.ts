@@ -645,3 +645,69 @@ describe("makeRequestHandler", () => {
     expect(response.status).toBe(400);
   });
 });
+
+describe("handler wrapper pattern", () => {
+  // Minimal wrapper that injects a user object
+  const withUser = <
+    TInput extends z.ZodObject<any, any>,
+    TOutput extends z.ZodObject<any, any>
+  >(props: {
+    input: TInput;
+    output: TOutput;
+    run: (args: {
+      input: z.infer<TInput>;
+      sendOutput: (output: z.infer<TOutput>) => Promise<Response>;
+      user: { id: string }; // Extra prop injected by wrapper
+    }) => Promise<Response>;
+  }) => {
+    return makeRequestHandler({
+      input: props.input,
+      output: props.output,
+      method: "GET",
+      path: "/test",
+      run: async ({ input, sendOutput }) => {
+        const user = { id: "user-123" }; // Injected by wrapper
+        return props.run({ input, sendOutput, user });
+      },
+    });
+  };
+
+  it("should work with wrapper that injects additional props", async () => {
+    const { handler } = withUser({
+      input: z.object({ name: z.string() }),
+      output: z.object({ greeting: z.string(), userId: z.string() }),
+      run: async ({ input, sendOutput, user }) => {
+        return sendOutput({
+          greeting: `Hello, ${input.name}!`,
+          userId: user.id,
+        });
+      },
+    });
+
+    const response = await handler(
+      new Request("http://test.com/test?name=John")
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ greeting: "Hello, John!", userId: "user-123" });
+  });
+
+  it("should work with .strict() schemas", async () => {
+    const { handler } = withUser({
+      input: z.object({ name: z.string() }).strict(),
+      output: z.object({ message: z.string() }).strict(),
+      run: async ({ input, sendOutput }) => {
+        return sendOutput({ message: `Hi ${input.name}` });
+      },
+    });
+
+    const response = await handler(
+      new Request("http://test.com/test?name=Jane")
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.message).toBe("Hi Jane");
+  });
+});
