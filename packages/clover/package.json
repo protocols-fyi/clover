@@ -32,11 +32,11 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@anatine/zod-openapi": "^1.14.2",
     "lodash.merge": "^4.6.2",
     "openapi3-ts": "^4.4.0",
     "path-to-regexp": "^6.3.0",
-    "zod": "^3.24.1"
+    "zod": "^4.1.13",
+    "zod-openapi": "^5.4.0"
   },
   "devDependencies": {
     "@types/lodash.merge": "^4.6.9",

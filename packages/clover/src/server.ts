@@ -1,19 +1,19 @@
-import { generateSchema } from '@anatine/zod-openapi';
-import merge from 'lodash.merge';
-import { oas31 } from 'openapi3-ts';
-import { z } from 'zod';
-import { commonReponses } from './responses';
+import merge from "lodash.merge";
+import { oas31 } from "openapi3-ts";
+import { z } from "zod";
+import { createSchema } from "zod-openapi";
+import { commonReponses } from "./responses";
 import {
   HTTPMethod,
   getKeysFromPathPattern,
   getParamsFromPath,
   httpMethodSupportsRequestBody,
-} from './utils';
-import { getLogger, formatLogPayload } from './logger';
+} from "./utils";
+import { getLogger, formatLogPayload } from "./logger";
 
 export interface IMakeRequestHandlerProps<
-  TInput extends z.AnyZodObject,
-  TOutput extends z.AnyZodObject,
+  TInput extends z.ZodObject<any>,
+  TOutput extends z.ZodObject<any>,
   TMethod extends HTTPMethod,
   TPath extends string
 > {
@@ -88,8 +88,8 @@ export interface IMakeRequestHandlerProps<
 }
 
 export interface IClientConfig<
-  TInput extends z.AnyZodObject,
-  TOutput extends z.AnyZodObject,
+  TInput extends z.ZodObject<any>,
+  TOutput extends z.ZodObject<any>,
   TMethod extends HTTPMethod,
   TPath extends string
 > {
@@ -114,8 +114,8 @@ export interface IClientConfig<
 }
 
 export interface IMakeRequestHandlerReturn<
-  TInput extends z.AnyZodObject,
-  TOutput extends z.AnyZodObject,
+  TInput extends z.ZodObject<any>,
+  TOutput extends z.ZodObject<any>,
   TMethod extends HTTPMethod,
   TPath extends string
 > {
@@ -135,13 +135,13 @@ export interface IMakeRequestHandlerReturn<
 
 export const errorResponseSchema = z.object({
   message: z.string(),
-  data: z.record(z.any()).optional(),
+  data: z.record(z.string(), z.any()).optional(),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;
 
 export const makeRequestHandler = <
-  TInput extends z.AnyZodObject,
-  TOutput extends z.AnyZodObject,
+  TInput extends z.ZodObject<any>,
+  TOutput extends z.ZodObject<any>,
   TMethod extends HTTPMethod,
   TPath extends string
 >(
@@ -165,9 +165,9 @@ export const makeRequestHandler = <
           .map((key) => {
             return {
               name: key,
-              in: 'query' as oas31.ParameterLocation,
+              in: "query" as oas31.ParameterLocation,
               schema: {
-                type: 'string' as oas31.SchemaObjectType,
+                type: "string" as oas31.SchemaObjectType,
               },
             };
           })
@@ -175,10 +175,10 @@ export const makeRequestHandler = <
     // add path parameters
     ...getKeysFromPathPattern(props.path).map((key) => ({
       name: String(key.name),
-      in: 'path' as oas31.ParameterLocation,
+      in: "path" as oas31.ParameterLocation,
       required: true,
       schema: {
-        type: 'string' as oas31.SchemaObjectType,
+        type: "string" as oas31.SchemaObjectType,
       },
     })),
   ];
@@ -189,8 +189,8 @@ export const makeRequestHandler = <
     | undefined = httpMethodSupportsRequestBody[props.method]
     ? {
         content: {
-          'application/json': {
-            schema: generateSchema(props.input),
+          "application/json": {
+            schema: createSchema(props.input).schema,
           },
         },
       }
@@ -203,10 +203,10 @@ export const makeRequestHandler = <
     responses: {
       // success
       200: {
-        description: 'Success',
+        description: "Success",
         content: {
-          'application/json': {
-            schema: generateSchema(props.output),
+          "application/json": {
+            schema: createSchema(props.output).schema,
           },
         },
       },
@@ -233,12 +233,12 @@ export const makeRequestHandler = <
     const requestForRun = request.clone();
     const requestForAuth = request.clone();
 
-    logger.log('debug', `${getLoggingPrefix(request)} begin`);
+    logger.log("debug", `${getLoggingPrefix(request)} begin`);
 
     // ensure the method is correct
     if (request.method !== props.method) {
       logger.log(
-        'warn',
+        "warn",
         `${getLoggingPrefix(request)} invalid HTTP method: received ${
           request.method
         }, expected ${props.method}`,
@@ -259,7 +259,7 @@ export const makeRequestHandler = <
         !(await props.authenticate(requestForAuth));
     } catch (error) {
       logger.log(
-        'error',
+        "error",
         `${getLoggingPrefix(request)} error during authentication check`,
         {
           error: error instanceof Error ? error : new Error(String(error)),
@@ -271,7 +271,7 @@ export const makeRequestHandler = <
     // ensure authentication is correct
     if (authenticationResult) {
       logger.log(
-        'debug',
+        "debug",
         `${getLoggingPrefix(request)} authentication check returned false`,
         {
           url: request.url,
@@ -289,7 +289,7 @@ export const makeRequestHandler = <
         ? // if the method supports a body, parse it
           await request.json().catch((error) => {
             logger.log(
-              'warn',
+              "warn",
               `${getLoggingPrefix(request)} error parsing request body`,
               {
                 error:
@@ -310,7 +310,7 @@ export const makeRequestHandler = <
     // if the input is invalid, return a 400
     if (!parsedData.success) {
       logger.log(
-        'warn',
+        "warn",
         `${getLoggingPrefix(request)} request validation failed`,
         {
           validationError: parsedData.error,
@@ -329,7 +329,7 @@ export const makeRequestHandler = <
       options?: Partial<ResponseInit>
     ) => {
       logger.log(
-        'debug',
+        "debug",
         `${getLoggingPrefix(request)} success ${options?.status ?? 200}`
       );
       return new Response(
@@ -338,7 +338,7 @@ export const makeRequestHandler = <
           {
             status: 200,
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
             },
           },
           options
@@ -351,11 +351,11 @@ export const makeRequestHandler = <
       message,
       data,
     }: { status: number } & ErrorResponse) => {
-      logger.log('debug', `${getLoggingPrefix(request)} error ${status}`);
+      logger.log("debug", `${getLoggingPrefix(request)} error ${status}`);
       return new Response(JSON.stringify({ message, data }), {
         status,
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
       });
     };
@@ -370,14 +370,14 @@ export const makeRequestHandler = <
       });
 
       logger.log(
-        'debug',
+        "debug",
         `${getLoggingPrefix(request)} success ${response.status}`
       );
 
       return response;
     } catch (error) {
       logger.log(
-        'error',
+        "error",
         `${getLoggingPrefix(request)} unhandled error when handling request`,
         {
           error: error instanceof Error ? error : new Error(String(error)),
