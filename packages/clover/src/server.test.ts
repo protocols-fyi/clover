@@ -930,16 +930,127 @@ describe("makeRequestHandler", () => {
         const parameters = openAPIPathsObject["/api/items"]?.get?.parameters;
         expect(parameters).toBeDefined();
 
-        // Currently, .meta() on query params is ignored (will be fixed)
         const userIdParam = parameters?.find((p: any) => p.name === "userId");
         expect(userIdParam).toMatchObject({
           name: "userId",
           in: "query",
-          schema: { type: "string" },
+          required: true,
+          schema: {
+            type: "string",
+            example: "user-123",
+            description: "User ID to filter by",
+          },
         });
-        // These should exist after enhancement:
-        // expect(userIdParam.schema.example).toBe("user-123");
-        // expect(userIdParam.schema.description).toBe("User ID to filter by");
+
+        const statusParam = parameters?.find((p: any) => p.name === "status");
+        expect(statusParam).toMatchObject({
+          name: "status",
+          in: "query",
+          required: false,
+          schema: {
+            type: "string",
+            example: "active",
+            description: "Filter by status",
+          },
+        });
+      });
+
+      it("should handle query parameters with different types and .meta()", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            page: z.number().meta({ example: 1, description: "Page number" }),
+            limit: z
+              .number()
+              .optional()
+              .meta({ example: 10, description: "Items per page" }),
+            verified: z
+              .boolean()
+              .meta({ example: true, description: "Filter verified users" }),
+            tags: z
+              .array(z.string())
+              .optional()
+              .meta({ example: ["tech", "science"] }),
+          }),
+          output: z.object({ data: z.array(z.any()) }),
+          method: "GET",
+          path: "/api/users",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ data: [] });
+          },
+        });
+
+        const parameters = openAPIPathsObject["/api/users"]?.get?.parameters;
+
+        const pageParam = parameters?.find((p: any) => p.name === "page");
+        expect(pageParam?.schema).toMatchObject({
+          type: "number",
+          example: 1,
+          description: "Page number",
+        });
+        expect(pageParam?.required).toBe(true);
+
+        const limitParam = parameters?.find((p: any) => p.name === "limit");
+        expect(limitParam?.schema).toMatchObject({
+          type: "number",
+          example: 10,
+          description: "Items per page",
+        });
+        expect(limitParam?.required).toBe(false);
+
+        const verifiedParam = parameters?.find(
+          (p: any) => p.name === "verified"
+        );
+        expect(verifiedParam?.schema).toMatchObject({
+          type: "boolean",
+          example: true,
+          description: "Filter verified users",
+        });
+
+        const tagsParam = parameters?.find((p: any) => p.name === "tags");
+        expect(tagsParam?.schema).toMatchObject({
+          type: "array",
+          example: ["tech", "science"],
+        });
+        expect(tagsParam?.required).toBe(false);
+      });
+
+      it("should handle query parameters with enums", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            sort: z
+              .enum(["asc", "desc"])
+              .meta({ example: "asc", description: "Sort direction" }),
+            status: z
+              .enum(["active", "inactive", "pending"])
+              .optional()
+              .meta({ example: "active" }),
+          }),
+          output: z.object({ data: z.array(z.any()) }),
+          method: "GET",
+          path: "/api/items",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ data: [] });
+          },
+        });
+
+        const parameters = openAPIPathsObject["/api/items"]?.get?.parameters;
+
+        const sortParam = parameters?.find((p: any) => p.name === "sort");
+        expect(sortParam?.schema).toMatchObject({
+          type: "string",
+          enum: ["asc", "desc"],
+          example: "asc",
+          description: "Sort direction",
+        });
+        expect(sortParam?.required).toBe(true);
+
+        const statusParam = parameters?.find((p: any) => p.name === "status");
+        expect(statusParam?.schema).toMatchObject({
+          type: "string",
+          enum: ["active", "inactive", "pending"],
+          example: "active",
+        });
+        expect(statusParam?.required).toBe(false);
       });
     });
 
@@ -1004,11 +1115,118 @@ describe("makeRequestHandler", () => {
           name: "userId",
           in: "path",
           required: true,
-          schema: { type: "string" },
+          schema: {
+            type: "string",
+            example: "user-123",
+            description: "Unique user identifier",
+          },
         });
-        // These should exist after enhancement:
-        // expect(userIdParam.schema.example).toBe("user-123");
-        // expect(userIdParam.schema.description).toBe("Unique user identifier");
+      });
+
+      it("should handle multiple path parameters with .meta()", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            orgId: z.string().meta({
+              example: "org-456",
+              description: "Organization ID",
+            }),
+            userId: z.string().meta({
+              example: "user-123",
+              description: "User ID",
+            }),
+            postId: z.string().meta({
+              example: "post-789",
+              description: "Post ID",
+            }),
+          }),
+          output: z.object({ post: z.any() }),
+          method: "GET",
+          path: "/api/orgs/:orgId/users/:userId/posts/:postId",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ post: {} });
+          },
+        });
+
+        const parameters =
+          openAPIPathsObject["/api/orgs/{orgId}/users/{userId}/posts/{postId}"]
+            ?.get?.parameters;
+
+        const orgIdParam = parameters?.find((p: any) => p.name === "orgId");
+        expect(orgIdParam).toMatchObject({
+          name: "orgId",
+          in: "path",
+          required: true,
+          schema: {
+            type: "string",
+            example: "org-456",
+            description: "Organization ID",
+          },
+        });
+
+        const userIdParam = parameters?.find((p: any) => p.name === "userId");
+        expect(userIdParam).toMatchObject({
+          name: "userId",
+          in: "path",
+          required: true,
+          schema: {
+            type: "string",
+            example: "user-123",
+            description: "User ID",
+          },
+        });
+
+        const postIdParam = parameters?.find((p: any) => p.name === "postId");
+        expect(postIdParam).toMatchObject({
+          name: "postId",
+          in: "path",
+          required: true,
+          schema: {
+            type: "string",
+            example: "post-789",
+            description: "Post ID",
+          },
+        });
+      });
+
+      it("should handle path parameters with different string formats", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            userId: z.string().uuid().meta({
+              example: "550e8400-e29b-41d4-a716-446655440000",
+              description: "User UUID",
+            }),
+            email: z.string().email().meta({
+              example: "user@example.com",
+              description: "User email",
+            }),
+          }),
+          output: z.object({ user: z.any() }),
+          method: "GET",
+          path: "/api/users/:userId/email/:email",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ user: {} });
+          },
+        });
+
+        const parameters =
+          openAPIPathsObject["/api/users/{userId}/email/{email}"]?.get
+            ?.parameters;
+
+        const userIdParam = parameters?.find((p: any) => p.name === "userId");
+        expect(userIdParam?.schema).toMatchObject({
+          type: "string",
+          format: "uuid",
+          example: "550e8400-e29b-41d4-a716-446655440000",
+          description: "User UUID",
+        });
+
+        const emailParam = parameters?.find((p: any) => p.name === "email");
+        expect(emailParam?.schema).toMatchObject({
+          type: "string",
+          format: "email",
+          example: "user@example.com",
+          description: "User email",
+        });
       });
     });
   });
