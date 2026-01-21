@@ -1473,6 +1473,214 @@ describe("makeRequestHandler", () => {
         });
       });
     });
+
+    describe("integration: complete route with .meta() examples", () => {
+      it("should handle examples across all parameter types (path, query, body, response)", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            // Path parameter
+            userId: z.string().meta({
+              example: "user-abc123",
+              description: "Unique identifier for the user",
+            }),
+            // Query parameters
+            includeMetadata: z.boolean().optional().meta({
+              example: true,
+              description: "Include additional metadata in response",
+            }),
+            format: z.enum(["json", "xml"]).optional().meta({
+              example: "json",
+              description: "Response format",
+            }),
+            // Request body
+            updateData: z.object({
+              profile: z.object({
+                displayName: z.string().meta({
+                  example: "Alice Johnson",
+                  description: "User's display name",
+                }),
+                bio: z.string().optional().meta({
+                  example: "Software engineer and open source contributor",
+                  description: "User biography",
+                }),
+                age: z.number().min(0).max(150).meta({
+                  example: 28,
+                  description: "User's age",
+                }),
+              }),
+              preferences: z.object({
+                theme: z
+                  .enum(["light", "dark", "auto"])
+                  .meta({ example: "dark", description: "UI theme preference" }),
+                notifications: z
+                  .boolean()
+                  .meta({ example: true, description: "Enable notifications" }),
+              }),
+              tags: z.array(z.string()).meta({
+                example: ["developer", "typescript", "react"],
+                description: "User interest tags",
+              }),
+            }),
+          }),
+          output: z.object({
+            success: z.boolean().meta({
+              example: true,
+              description: "Whether the update was successful",
+            }),
+            user: z.object({
+              id: z.string().meta({ example: "user-abc123" }),
+              displayName: z.string().meta({ example: "Alice Johnson" }),
+              updatedAt: z.string().datetime().meta({
+                example: "2024-01-15T14:30:00Z",
+                description: "Timestamp of last update",
+              }),
+            }),
+            metadata: z
+              .object({
+                version: z.number().meta({ example: 2 }),
+                processingTime: z
+                  .number()
+                  .meta({ example: 45, description: "Processing time in ms" }),
+              })
+              .optional(),
+          }),
+          method: "PATCH",
+          path: "/api/users/:userId",
+          run: async ({ sendOutput }) => {
+            return sendOutput({
+              success: true,
+              user: {
+                id: "user-abc123",
+                displayName: "Alice Johnson",
+                updatedAt: "2024-01-15T14:30:00Z",
+              },
+            });
+          },
+        });
+
+        const operation =
+          openAPIPathsObject["/api/users/{userId}"]?.patch;
+        expect(operation).toBeDefined();
+
+        // Verify path parameter
+        const pathParam = operation?.parameters?.find(
+          (p: any) => p.name === "userId" && p.in === "path"
+        );
+        expect(pathParam).toMatchObject({
+          name: "userId",
+          in: "path",
+          required: true,
+          schema: {
+            type: "string",
+            example: "user-abc123",
+            description: "Unique identifier for the user",
+          },
+        });
+
+        // Verify query parameters are NOT present (PATCH method has request body)
+        const queryParams = operation?.parameters?.filter(
+          (p: any) => p.in === "query"
+        );
+        expect(queryParams).toHaveLength(0);
+
+        // Verify request body with nested examples
+        const requestBodySchema = (operation?.requestBody as any)?.content?.[
+          "application/json"
+        ]?.schema;
+        expect(requestBodySchema).toBeDefined();
+
+        // Check nested profile fields
+        expect(
+          requestBodySchema.properties.updateData.properties.profile.properties
+            .displayName
+        ).toMatchObject({
+          type: "string",
+          example: "Alice Johnson",
+          description: "User's display name",
+        });
+
+        expect(
+          requestBodySchema.properties.updateData.properties.profile.properties
+            .bio
+        ).toMatchObject({
+          type: "string",
+          example: "Software engineer and open source contributor",
+          description: "User biography",
+        });
+
+        expect(
+          requestBodySchema.properties.updateData.properties.profile.properties
+            .age
+        ).toMatchObject({
+          type: "number",
+          minimum: 0,
+          maximum: 150,
+          example: 28,
+          description: "User's age",
+        });
+
+        // Check preferences
+        expect(
+          requestBodySchema.properties.updateData.properties.preferences
+            .properties.theme
+        ).toMatchObject({
+          type: "string",
+          enum: ["light", "dark", "auto"],
+          example: "dark",
+          description: "UI theme preference",
+        });
+
+        // Check array with example
+        expect(
+          requestBodySchema.properties.updateData.properties.tags
+        ).toMatchObject({
+          type: "array",
+          example: ["developer", "typescript", "react"],
+          description: "User interest tags",
+        });
+
+        // Verify response body with examples
+        const responseSchema = (operation?.responses?.[200] as any)?.content?.[
+          "application/json"
+        ]?.schema;
+        expect(responseSchema).toBeDefined();
+
+        expect(responseSchema.properties.success).toMatchObject({
+          type: "boolean",
+          example: true,
+          description: "Whether the update was successful",
+        });
+
+        expect(responseSchema.properties.user.properties.id).toMatchObject({
+          type: "string",
+          example: "user-abc123",
+        });
+
+        expect(
+          responseSchema.properties.user.properties.displayName
+        ).toMatchObject({
+          type: "string",
+          example: "Alice Johnson",
+        });
+
+        expect(
+          responseSchema.properties.user.properties.updatedAt
+        ).toMatchObject({
+          type: "string",
+          format: "date-time",
+          example: "2024-01-15T14:30:00Z",
+          description: "Timestamp of last update",
+        });
+
+        expect(
+          responseSchema.properties.metadata.properties.processingTime
+        ).toMatchObject({
+          type: "number",
+          example: 45,
+          description: "Processing time in ms",
+        });
+      });
+    });
   });
 
   it("should return 400 for missing required fields", async () => {
