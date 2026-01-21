@@ -51,3 +51,11 @@ export type PathParamNames<
   : Path extends `${string}:${infer Name}`
   ? Name | Acc
   : Acc;
+
+/**
+ * Convert Express-style path parameters to OpenAPI-style.
+ * e.g., "/api/v1/users/:id/posts/:postId" → "/api/v1/users/{id}/posts/{postId}"
+ */
+export const toOpenAPIPath = (path: string): string => {
+  return path.replace(/:([^/]+)/g, "{$1}");
+};

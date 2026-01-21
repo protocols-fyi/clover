@@ -607,6 +607,23 @@ describe("makeRequestHandler", () => {
         },
       });
     });
+
+    it("should convert Express-style path params to OpenAPI format", () => {
+      const { openAPIPathsObject } = makeRequestHandler({
+        input: z.object({ userId: z.string(), postId: z.string() }),
+        output: z.object({ post: z.string() }),
+        method: "GET",
+        path: "/api/users/:userId/posts/:postId",
+        run: async ({ sendOutput }) => {
+          return sendOutput({ post: "test" });
+        },
+      });
+
+      // Path should use {param} syntax, not :param
+      expect(Object.keys(openAPIPathsObject)).toEqual([
+        "/api/users/{userId}/posts/{postId}",
+      ]);
+    });
   });
 
   it("should return 400 for missing required fields", async () => {
