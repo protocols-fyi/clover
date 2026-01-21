@@ -1,5 +1,11 @@
 # @sarim.garden/clover
 
+## 2.5.3
+
+### Patch Changes
+
+- 2a71193: Fix brace-expansion ReDoS vulnerability (CVE-2025-5889) via pnpm overrides
+
 ## 2.5.2
 
 ### Patch Changes
