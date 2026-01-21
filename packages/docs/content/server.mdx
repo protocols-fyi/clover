@@ -82,6 +82,207 @@ export const document: OpenAPIObject = {
 };
 ```
 
+### OpenAPI Examples and Descriptions
+
+Clover supports OpenAPI examples and descriptions using Zod's `.meta()` method. You can add examples and descriptions to any field in your input or output schemas, including query parameters, path parameters, request bodies, and responses.
+
+#### Basic Usage
+
+```ts
+import { z } from "zod";
+import { makeRequestHandler } from "@protocols-fyi/clover";
+
+const { handler, openAPIPathsObject } = makeRequestHandler({
+  input: z.object({
+    name: z.string().meta({
+      example: "Alice",
+      description: "User's full name",
+    }),
+    age: z.number().meta({
+      example: 30,
+      description: "User's age in years",
+    }),
+  }),
+  output: z.object({
+    greeting: z.string().meta({
+      example: "Hello, Alice!",
+      description: "Personalized greeting message",
+    }),
+  }),
+  method: "POST",
+  path: "/api/greet",
+  run: async ({ input, sendOutput }) => {
+    return sendOutput({
+      greeting: `Hello, ${input.name}!`,
+    });
+  },
+});
+```
+
+#### Query Parameters with Examples
+
+For GET requests, query parameters can include examples and descriptions:
+
+```ts
+const { handler } = makeRequestHandler({
+  input: z.object({
+    search: z.string().meta({
+      example: "typescript",
+      description: "Search query string",
+    }),
+    page: z.number().optional().meta({
+      example: 1,
+      description: "Page number for pagination",
+    }),
+    limit: z.number().optional().meta({
+      example: 10,
+      description: "Number of items per page",
+    }),
+  }),
+  output: z.object({
+    results: z.array(z.string()),
+  }),
+  method: "GET",
+  path: "/api/search",
+  run: async ({ input, sendOutput }) => {
+    // Implementation
+    return sendOutput({ results: [] });
+  },
+});
+```
+
+#### Path Parameters with Examples
+
+Path parameters also support examples and descriptions:
+
+```ts
+const { handler } = makeRequestHandler({
+  input: z.object({
+    userId: z.string().uuid().meta({
+      example: "550e8400-e29b-41d4-a716-446655440000",
+      description: "Unique user identifier (UUID format)",
+    }),
+  }),
+  output: z.object({
+    user: z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+  }),
+  method: "GET",
+  path: "/api/users/:userId",
+  run: async ({ input, sendOutput }) => {
+    // Implementation
+    return sendOutput({ user: { id: input.userId, name: "Alice" } });
+  },
+});
+```
+
+#### Nested Objects and Arrays
+
+Examples work with nested objects and arrays:
+
+```ts
+const { handler } = makeRequestHandler({
+  input: z.object({
+    user: z.object({
+      profile: z.object({
+        firstName: z.string().meta({ example: "John" }),
+        lastName: z.string().meta({ example: "Doe" }),
+      }),
+      tags: z.array(z.string()).meta({
+        example: ["developer", "typescript", "react"],
+        description: "User interest tags",
+      }),
+    }),
+  }),
+  output: z.object({
+    success: z.boolean().meta({ example: true }),
+  }),
+  method: "POST",
+  path: "/api/users",
+  run: async ({ sendOutput }) => {
+    return sendOutput({ success: true });
+  },
+});
+```
+
+#### Enums with Examples
+
+Enum fields can have examples and descriptions:
+
+```ts
+const { handler } = makeRequestHandler({
+  input: z.object({
+    status: z.enum(["active", "inactive", "pending"]).meta({
+      example: "active",
+      description: "User account status",
+    }),
+    role: z.enum(["admin", "user", "guest"]).meta({
+      example: "user",
+      description: "User role in the system",
+    }),
+  }),
+  output: z.object({
+    updated: z.boolean(),
+  }),
+  method: "PATCH",
+  path: "/api/users/:userId",
+  run: async ({ sendOutput }) => {
+    return sendOutput({ updated: true });
+  },
+});
+```
+
+#### Type Coercion
+
+Clover handles type coercion properly in query parameters:
+
+```ts
+const { handler } = makeRequestHandler({
+  input: z.object({
+    // Query params are strings by default, but can be coerced to numbers
+    count: z.coerce.number().meta({
+      example: 42,
+      description: "Count value (coerced from query string)",
+    }),
+    enabled: z.coerce.boolean().meta({
+      example: true,
+      description: "Feature flag (coerced from query string)",
+    }),
+  }),
+  output: z.object({
+    data: z.array(z.any()),
+  }),
+  method: "GET",
+  path: "/api/items",
+  run: async ({ sendOutput }) => {
+    return sendOutput({ data: [] });
+  },
+});
+```
+
+#### Additional Metadata Options
+
+The `.meta()` method supports other zod-openapi properties as well:
+
+```ts
+z.string().meta({
+  example: "value",
+  description: "Field description",
+  // Override the entire schema if needed
+  override: {
+    type: "string",
+    minLength: 5,
+    maxLength: 100,
+  },
+  // ID for reusable component schemas
+  id: "ComponentName",
+});
+```
+
+For more details on zod-openapi metadata options, see the [zod-openapi documentation](https://github.com/samchungy/zod-openapi).
+
 ## Usage with frameworks
 
 ### Next.js
