@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { getKeysFromPathPattern, getParamsFromPath } from "./utils";
+import {
+  getKeysFromPathPattern,
+  getParamsFromPath,
+  toOpenAPIPath,
+} from "./utils";
 
 describe("utils", () => {
   describe("getKeysFromPathPattern", () => {
@@ -25,6 +29,28 @@ describe("utils", () => {
       const path = "/api/users/123";
       const params = getParamsFromPath(pattern, path);
       expect(params).toEqual({ id: "123" });
+    });
+  });
+
+  describe("toOpenAPIPath", () => {
+    it("should convert single parameter", () => {
+      expect(toOpenAPIPath("/api/users/:id")).toBe("/api/users/{id}");
+    });
+
+    it("should convert multiple parameters", () => {
+      expect(toOpenAPIPath("/api/users/:userId/posts/:postId")).toBe(
+        "/api/users/{userId}/posts/{postId}"
+      );
+    });
+
+    it("should handle paths without parameters", () => {
+      expect(toOpenAPIPath("/api/users")).toBe("/api/users");
+    });
+
+    it("should handle parameter at end of path", () => {
+      expect(toOpenAPIPath("/api/v1/catalog/:collection/:scenario")).toBe(
+        "/api/v1/catalog/{collection}/{scenario}"
+      );
     });
   });
 });

@@ -8,6 +8,7 @@ import {
   getKeysFromPathPattern,
   getParamsFromPath,
   httpMethodSupportsRequestBody,
+  toOpenAPIPath,
 } from "./utils";
 import { getLogger, formatLogPayload } from "./logger";
 
@@ -225,7 +226,7 @@ export const makeRequestHandler = <
   };
 
   const openAPIPath: oas31.PathsObject = {
-    [props.path]: openAPIPathItem,
+    [toOpenAPIPath(props.path)]: openAPIPathItem,
   };
 
   const handler = async (request: Request) => {
