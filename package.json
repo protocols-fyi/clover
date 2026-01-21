@@ -19,5 +19,11 @@
     "turbo": "^2.3.3"
   },
   "packageManager": "pnpm@9.4.0",
-  "name": "cardboard"
+  "name": "cardboard",
+  "pnpm": {
+    "overrides": {
+      "brace-expansion@^1": "^1.1.12",
+      "brace-expansion@^2": "^2.0.2"
+    }
+  }
 }
