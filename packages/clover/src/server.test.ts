@@ -624,6 +624,241 @@ describe("makeRequestHandler", () => {
         "/api/users/{userId}/posts/{postId}",
       ]);
     });
+
+    describe(".meta() examples in request/response bodies", () => {
+      it("should include example and description in request body fields", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            name: z.string().meta({
+              example: "Alice",
+              description: "User's full name",
+            }),
+            age: z.number().meta({
+              example: 30,
+              description: "User's age in years",
+            }),
+          }),
+          output: z.object({ success: z.boolean() }),
+          method: "POST",
+          path: "/api/users",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ success: true });
+          },
+        });
+
+        const requestBody =
+          openAPIPathsObject["/api/users"]?.post?.requestBody;
+        expect(requestBody).toBeDefined();
+        const schema = (requestBody as any)?.content?.["application/json"]
+          ?.schema;
+
+        expect(schema.properties.name).toMatchObject({
+          type: "string",
+          example: "Alice",
+          description: "User's full name",
+        });
+        expect(schema.properties.age).toMatchObject({
+          type: "number",
+          example: 30,
+          description: "User's age in years",
+        });
+      });
+
+      it("should include examples in nested objects", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            user: z.object({
+              firstName: z.string().meta({ example: "John" }),
+              lastName: z.string().meta({ example: "Doe" }),
+              address: z.object({
+                city: z.string().meta({ example: "New York" }),
+                zipCode: z.string().meta({ example: "10001" }),
+              }),
+            }),
+          }),
+          output: z.object({ id: z.string() }),
+          method: "POST",
+          path: "/api/users",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ id: "user-123" });
+          },
+        });
+
+        const schema = (
+          openAPIPathsObject["/api/users"]?.post?.requestBody as any
+        )?.content?.["application/json"]?.schema;
+
+        expect(schema.properties.user.properties.firstName.example).toBe(
+          "John"
+        );
+        expect(schema.properties.user.properties.lastName.example).toBe("Doe");
+        expect(
+          schema.properties.user.properties.address.properties.city.example
+        ).toBe("New York");
+        expect(
+          schema.properties.user.properties.address.properties.zipCode.example
+        ).toBe("10001");
+      });
+
+      it("should include examples in arrays", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            tags: z
+              .array(z.string())
+              .meta({ example: ["tech", "programming", "typescript"] }),
+            scores: z.array(z.number()).meta({ example: [95, 87, 92] }),
+          }),
+          output: z.object({ success: z.boolean() }),
+          method: "POST",
+          path: "/api/data",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ success: true });
+          },
+        });
+
+        const schema = (
+          openAPIPathsObject["/api/data"]?.post?.requestBody as any
+        )?.content?.["application/json"]?.schema;
+
+        expect(schema.properties.tags.example).toEqual([
+          "tech",
+          "programming",
+          "typescript",
+        ]);
+        expect(schema.properties.scores.example).toEqual([95, 87, 92]);
+      });
+
+      it("should include examples and descriptions for enums", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            status: z
+              .enum(["active", "inactive", "pending"])
+              .meta({
+                example: "active",
+                description: "User account status",
+              }),
+            role: z
+              .enum(["admin", "user", "guest"])
+              .meta({ example: "user", description: "User role" }),
+          }),
+          output: z.object({ success: z.boolean() }),
+          method: "POST",
+          path: "/api/users",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ success: true });
+          },
+        });
+
+        const schema = (
+          openAPIPathsObject["/api/users"]?.post?.requestBody as any
+        )?.content?.["application/json"]?.schema;
+
+        expect(schema.properties.status).toMatchObject({
+          type: "string",
+          enum: ["active", "inactive", "pending"],
+          example: "active",
+          description: "User account status",
+        });
+        expect(schema.properties.role).toMatchObject({
+          type: "string",
+          enum: ["admin", "user", "guest"],
+          example: "user",
+          description: "User role",
+        });
+      });
+
+      it("should include examples in response bodies", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({ name: z.string() }),
+          output: z.object({
+            id: z.string().meta({
+              example: "user-123",
+              description: "Unique user identifier",
+            }),
+            name: z.string().meta({ example: "Alice" }),
+            createdAt: z.string().meta({
+              example: "2024-01-15T10:30:00Z",
+              description: "ISO 8601 timestamp",
+            }),
+            stats: z.object({
+              posts: z.number().meta({ example: 42 }),
+              followers: z.number().meta({ example: 1337 }),
+            }),
+          }),
+          method: "POST",
+          path: "/api/users",
+          run: async ({ sendOutput }) => {
+            return sendOutput({
+              id: "user-123",
+              name: "Alice",
+              createdAt: "2024-01-15T10:30:00Z",
+              stats: { posts: 42, followers: 1337 },
+            });
+          },
+        });
+
+        const responseSchema = (
+          openAPIPathsObject["/api/users"]?.post?.responses?.[200] as any
+        )?.content?.["application/json"]?.schema;
+
+        expect(responseSchema.properties.id).toMatchObject({
+          type: "string",
+          example: "user-123",
+          description: "Unique user identifier",
+        });
+        expect(responseSchema.properties.name.example).toBe("Alice");
+        expect(responseSchema.properties.createdAt).toMatchObject({
+          type: "string",
+          example: "2024-01-15T10:30:00Z",
+          description: "ISO 8601 timestamp",
+        });
+        expect(responseSchema.properties.stats.properties.posts.example).toBe(
+          42
+        );
+        expect(
+          responseSchema.properties.stats.properties.followers.example
+        ).toBe(1337);
+      });
+
+      it("should handle mixed example formats", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            withExample: z.string().meta({ example: "value1" }),
+            withDescription: z.string().meta({ description: "A description" }),
+            withBoth: z
+              .string()
+              .meta({ example: "value2", description: "Both provided" }),
+            withoutMeta: z.string(),
+          }),
+          output: z.object({ success: z.boolean() }),
+          method: "POST",
+          path: "/api/test",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ success: true });
+          },
+        });
+
+        const schema = (
+          openAPIPathsObject["/api/test"]?.post?.requestBody as any
+        )?.content?.["application/json"]?.schema;
+
+        expect(schema.properties.withExample.example).toBe("value1");
+        expect(schema.properties.withExample.description).toBeUndefined();
+
+        expect(schema.properties.withDescription.example).toBeUndefined();
+        expect(schema.properties.withDescription.description).toBe(
+          "A description"
+        );
+
+        expect(schema.properties.withBoth).toMatchObject({
+          example: "value2",
+          description: "Both provided",
+        });
+
+        expect(schema.properties.withoutMeta.example).toBeUndefined();
+        expect(schema.properties.withoutMeta.description).toBeUndefined();
+      });
+    });
   });
 
   it("should return 400 for missing required fields", async () => {
