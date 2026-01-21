@@ -179,14 +179,17 @@ export const makeRequestHandler = <
           })
       : []),
     // add path parameters
-    ...getKeysFromPathPattern(props.path).map((key) => ({
-      name: String(key.name),
-      in: "path" as oas31.ParameterLocation,
-      required: true,
-      schema: {
-        type: "string" as oas31.SchemaObjectType,
-      },
-    })),
+    ...getKeysFromPathPattern(props.path).map((key) => {
+      const fieldSchema = props.input.shape[key.name];
+      const { schema } = createSchema(fieldSchema);
+
+      return {
+        name: String(key.name),
+        in: "path" as oas31.ParameterLocation,
+        required: true, // Path params are always required
+        schema: schema,
+      };
+    }),
   ];
 
   const openAPIRequestBody:
