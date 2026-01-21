@@ -1229,6 +1229,250 @@ describe("makeRequestHandler", () => {
         });
       });
     });
+
+    describe(".meta() edge cases", () => {
+      it("should handle empty .meta({})", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            name: z.string().meta({}),
+          }),
+          output: z.object({ success: z.boolean() }),
+          method: "GET",
+          path: "/api/test",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ success: true });
+          },
+        });
+
+        const parameters = openAPIPathsObject["/api/test"]?.get?.parameters;
+        const nameParam = parameters?.find((p: any) => p.name === "name");
+        expect(nameParam).toBeDefined();
+        expect(nameParam?.schema.type).toBe("string");
+      });
+
+      it("should handle mixed path, query, and body parameters with .meta()", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            userId: z.string().meta({
+              example: "user-123",
+              description: "User ID from path",
+            }),
+            filter: z.string().optional().meta({
+              example: "active",
+              description: "Query filter",
+            }),
+            data: z.object({
+              name: z.string().meta({ example: "Alice" }),
+              age: z.number().meta({ example: 30 }),
+            }),
+          }),
+          output: z.object({ success: z.boolean() }),
+          method: "POST",
+          path: "/api/users/:userId",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ success: true });
+          },
+        });
+
+        const pathObj = openAPIPathsObject["/api/users/{userId}"]?.post;
+
+        // Check path parameter
+        const pathParams = pathObj?.parameters?.filter(
+          (p: any) => p.in === "path"
+        );
+        expect(pathParams).toHaveLength(1);
+        expect(pathParams?.[0]).toMatchObject({
+          name: "userId",
+          in: "path",
+          schema: {
+            type: "string",
+            example: "user-123",
+            description: "User ID from path",
+          },
+        });
+
+        // Check request body
+        const requestBodySchema = (pathObj?.requestBody as any)?.content?.[
+          "application/json"
+        ]?.schema;
+        expect(requestBodySchema.properties.data.properties.name).toMatchObject(
+          {
+            type: "string",
+            example: "Alice",
+          }
+        );
+        expect(requestBodySchema.properties.data.properties.age).toMatchObject({
+          type: "number",
+          example: 30,
+        });
+      });
+
+      it("should handle discriminated unions with examples", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.discriminatedUnion("type", [
+            z.object({
+              type: z.literal("email").meta({ example: "email" }),
+              email: z.string().email().meta({ example: "user@example.com" }),
+            }),
+            z.object({
+              type: z.literal("sms").meta({ example: "sms" }),
+              phone: z.string().meta({ example: "+1234567890" }),
+            }),
+          ]),
+          output: z.object({ sent: z.boolean() }),
+          method: "POST",
+          path: "/api/notify",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ sent: true });
+          },
+        });
+
+        const requestBody =
+          openAPIPathsObject["/api/notify"]?.post?.requestBody;
+        expect(requestBody).toBeDefined();
+        const schema = (requestBody as any)?.content?.["application/json"]
+          ?.schema;
+
+        // Discriminated unions should have oneOf with examples
+        expect(schema.oneOf).toBeDefined();
+        expect(schema.oneOf).toHaveLength(2);
+      });
+
+      it("should handle large example values", () => {
+        const largeText = "a".repeat(1000);
+        const largeArray = Array.from({ length: 100 }, (_, i) => i);
+
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            content: z.string().meta({ example: largeText }),
+            items: z.array(z.number()).meta({ example: largeArray }),
+          }),
+          output: z.object({ success: z.boolean() }),
+          method: "POST",
+          path: "/api/data",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ success: true });
+          },
+        });
+
+        const schema = (
+          openAPIPathsObject["/api/data"]?.post?.requestBody as any
+        )?.content?.["application/json"]?.schema;
+
+        expect(schema.properties.content.example).toBe(largeText);
+        expect(schema.properties.items.example).toEqual(largeArray);
+      });
+
+      it("should handle .meta() on optional fields in request bodies", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            required: z.string().meta({ example: "value1" }),
+            optional: z.string().optional().meta({ example: "value2" }),
+            withDefault: z
+              .string()
+              .default("default")
+              .meta({ example: "value3" }),
+          }),
+          output: z.object({ success: z.boolean() }),
+          method: "POST",
+          path: "/api/test",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ success: true });
+          },
+        });
+
+        const schema = (
+          openAPIPathsObject["/api/test"]?.post?.requestBody as any
+        )?.content?.["application/json"]?.schema;
+
+        expect(schema.properties.required.example).toBe("value1");
+        expect(schema.properties.optional.example).toBe("value2");
+        expect(schema.properties.withDefault.example).toBe("value3");
+        expect(schema.properties.withDefault.default).toBe("default");
+
+        // Check required array
+        expect(schema.required).toContain("required");
+        expect(schema.required).not.toContain("optional");
+      });
+
+      it("should handle URL and date-time formats with examples", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            website: z.string().url().meta({
+              example: "https://example.com",
+              description: "Website URL",
+            }),
+            createdAt: z.string().datetime().meta({
+              example: "2024-01-15T10:30:00Z",
+              description: "Creation timestamp",
+            }),
+          }),
+          output: z.object({ success: z.boolean() }),
+          method: "POST",
+          path: "/api/resources",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ success: true });
+          },
+        });
+
+        const schema = (
+          openAPIPathsObject["/api/resources"]?.post?.requestBody as any
+        )?.content?.["application/json"]?.schema;
+
+        expect(schema.properties.website).toMatchObject({
+          type: "string",
+          format: "uri",
+          example: "https://example.com",
+          description: "Website URL",
+        });
+
+        expect(schema.properties.createdAt).toMatchObject({
+          type: "string",
+          format: "date-time",
+          example: "2024-01-15T10:30:00Z",
+          description: "Creation timestamp",
+        });
+      });
+
+      it("should handle coerced types in query parameters", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            count: z.coerce.number().meta({
+              example: 42,
+              description: "Count value coerced from string",
+            }),
+            enabled: z.coerce.boolean().meta({
+              example: true,
+              description: "Boolean coerced from string",
+            }),
+          }),
+          output: z.object({ data: z.array(z.any()) }),
+          method: "GET",
+          path: "/api/items",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ data: [] });
+          },
+        });
+
+        const parameters = openAPIPathsObject["/api/items"]?.get?.parameters;
+
+        const countParam = parameters?.find((p: any) => p.name === "count");
+        expect(countParam?.schema).toMatchObject({
+          type: "number",
+          example: 42,
+          description: "Count value coerced from string",
+        });
+
+        const enabledParam = parameters?.find(
+          (p: any) => p.name === "enabled"
+        );
+        expect(enabledParam?.schema).toMatchObject({
+          type: "boolean",
+          example: true,
+          description: "Boolean coerced from string",
+        });
+      });
+    });
   });
 
   it("should return 400 for missing required fields", async () => {
