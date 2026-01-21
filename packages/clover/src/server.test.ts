@@ -859,6 +859,154 @@ describe("makeRequestHandler", () => {
         expect(schema.properties.withoutMeta.description).toBeUndefined();
       });
     });
+
+    describe("query parameter schemas (baseline)", () => {
+      it("should generate basic schema for query parameters", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            search: z.string(),
+            page: z.number(),
+            limit: z.number().optional(),
+          }),
+          output: z.object({ results: z.array(z.string()) }),
+          method: "GET",
+          path: "/api/search",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ results: [] });
+          },
+        });
+
+        const parameters = openAPIPathsObject["/api/search"]?.get?.parameters;
+        expect(parameters).toBeDefined();
+        expect(parameters).toHaveLength(3);
+
+        // Currently, all query parameters get basic string schemas
+        const searchParam = parameters?.find((p: any) => p.name === "search");
+        expect(searchParam).toMatchObject({
+          name: "search",
+          in: "query",
+          schema: { type: "string" },
+        });
+
+        const pageParam = parameters?.find((p: any) => p.name === "page");
+        expect(pageParam).toMatchObject({
+          name: "page",
+          in: "query",
+          schema: { type: "string" },
+        });
+
+        const limitParam = parameters?.find((p: any) => p.name === "limit");
+        expect(limitParam).toMatchObject({
+          name: "limit",
+          in: "query",
+          schema: { type: "string" },
+        });
+      });
+
+      it("should handle query parameters with .meta()", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            userId: z.string().meta({
+              example: "user-123",
+              description: "User ID to filter by",
+            }),
+            status: z.string().optional().meta({
+              example: "active",
+              description: "Filter by status",
+            }),
+          }),
+          output: z.object({ data: z.array(z.any()) }),
+          method: "GET",
+          path: "/api/items",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ data: [] });
+          },
+        });
+
+        const parameters = openAPIPathsObject["/api/items"]?.get?.parameters;
+        expect(parameters).toBeDefined();
+
+        // Currently, .meta() on query params is ignored (will be fixed)
+        const userIdParam = parameters?.find((p: any) => p.name === "userId");
+        expect(userIdParam).toMatchObject({
+          name: "userId",
+          in: "query",
+          schema: { type: "string" },
+        });
+        // These should exist after enhancement:
+        // expect(userIdParam.schema.example).toBe("user-123");
+        // expect(userIdParam.schema.description).toBe("User ID to filter by");
+      });
+    });
+
+    describe("path parameter schemas (baseline)", () => {
+      it("should generate basic schema for path parameters", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            userId: z.string(),
+            postId: z.string(),
+          }),
+          output: z.object({ post: z.string() }),
+          method: "GET",
+          path: "/api/users/:userId/posts/:postId",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ post: "test" });
+          },
+        });
+
+        const parameters =
+          openAPIPathsObject["/api/users/{userId}/posts/{postId}"]?.get
+            ?.parameters;
+        expect(parameters).toBeDefined();
+
+        const userIdParam = parameters?.find((p: any) => p.name === "userId");
+        expect(userIdParam).toMatchObject({
+          name: "userId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        });
+
+        const postIdParam = parameters?.find((p: any) => p.name === "postId");
+        expect(postIdParam).toMatchObject({
+          name: "postId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        });
+      });
+
+      it("should handle path parameters with .meta()", () => {
+        const { openAPIPathsObject } = makeRequestHandler({
+          input: z.object({
+            userId: z.string().meta({
+              example: "user-123",
+              description: "Unique user identifier",
+            }),
+          }),
+          output: z.object({ user: z.any() }),
+          method: "GET",
+          path: "/api/users/:userId",
+          run: async ({ sendOutput }) => {
+            return sendOutput({ user: {} });
+          },
+        });
+
+        const parameters =
+          openAPIPathsObject["/api/users/{userId}"]?.get?.parameters;
+        const userIdParam = parameters?.find((p: any) => p.name === "userId");
+
+        expect(userIdParam).toMatchObject({
+          name: "userId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        });
+        // These should exist after enhancement:
+        // expect(userIdParam.schema.example).toBe("user-123");
+        // expect(userIdParam.schema.description).toBe("Unique user identifier");
+      });
+    });
   });
 
   it("should return 400 for missing required fields", async () => {
