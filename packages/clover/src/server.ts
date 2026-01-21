@@ -164,12 +164,17 @@ export const makeRequestHandler = <
             );
           })
           .map((key) => {
+            const fieldSchema = props.input.shape[key];
+            const { schema } = createSchema(fieldSchema);
+
+            // Determine if parameter is required by checking if it's optional
+            const isOptional = fieldSchema.isOptional?.() ?? false;
+
             return {
               name: key,
               in: "query" as oas31.ParameterLocation,
-              schema: {
-                type: "string" as oas31.SchemaObjectType,
-              },
+              required: !isOptional,
+              schema: schema,
             };
           })
       : []),

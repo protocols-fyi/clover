@@ -579,6 +579,7 @@ describe("makeRequestHandler", () => {
               {
                 name: "name",
                 in: "query",
+                required: true,
                 schema: { type: "string" },
               },
             ],
@@ -880,11 +881,12 @@ describe("makeRequestHandler", () => {
         expect(parameters).toBeDefined();
         expect(parameters).toHaveLength(3);
 
-        // Currently, all query parameters get basic string schemas
+        // Query parameters now get proper type schemas via createSchema()
         const searchParam = parameters?.find((p: any) => p.name === "search");
         expect(searchParam).toMatchObject({
           name: "search",
           in: "query",
+          required: true,
           schema: { type: "string" },
         });
 
@@ -892,14 +894,16 @@ describe("makeRequestHandler", () => {
         expect(pageParam).toMatchObject({
           name: "page",
           in: "query",
-          schema: { type: "string" },
+          required: true,
+          schema: { type: "number" },
         });
 
         const limitParam = parameters?.find((p: any) => p.name === "limit");
         expect(limitParam).toMatchObject({
           name: "limit",
           in: "query",
-          schema: { type: "string" },
+          required: false,
+          schema: { type: "number" },
         });
       });
 
