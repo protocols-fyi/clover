@@ -153,16 +153,26 @@ export const makeRequestHandler = <
     return `Handler ${request.method} ${url.pathname}`;
   };
 
+  const pathKeys = getKeysFromPathPattern(props.path);
+  const pathKeyNames = new Set(pathKeys.map((k) => String(k.name)));
+
+  // Validate that all path parameters are defined in the input schema
+  const missingParams = pathKeys.filter(
+    (key) => !(key.name in props.input.shape)
+  );
+  if (missingParams.length > 0) {
+    const missingNames = missingParams.map((p) => `"${p.name}"`).join(", ");
+    throw new Error(
+      `Path parameter${missingParams.length > 1 ? "s" : ""} ${missingNames} in "${props.path}" ${missingParams.length > 1 ? "are" : "is"} not defined in the input schema`
+    );
+  }
+
   const openAPIParameters: (oas31.ParameterObject | oas31.ReferenceObject)[] = [
     // query parameters
     ...(!httpMethodSupportsRequestBody[props.method]
       ? Object.keys(props.input.shape)
           // exclude query parameters that are already path parameters
-          .filter((key) => {
-            return !getKeysFromPathPattern(props.path).some(
-              (k) => String(k.name) === key
-            );
-          })
+          .filter((key) => !pathKeyNames.has(key))
           .map((key) => {
             const fieldSchema = props.input.shape[key];
             const { schema } = createSchema(fieldSchema);
@@ -178,32 +188,18 @@ export const makeRequestHandler = <
             };
           })
       : []),
-    // add path parameters
-    ...(() => {
-      const pathKeys = getKeysFromPathPattern(props.path);
-      const missingParams = pathKeys.filter(
-        (key) => !(key.name in props.input.shape)
-      );
+    // path parameters
+    ...pathKeys.map((key) => {
+      const fieldSchema = props.input.shape[key.name];
+      const { schema } = createSchema(fieldSchema);
 
-      if (missingParams.length > 0) {
-        const missingNames = missingParams.map((p) => `"${p.name}"`).join(", ");
-        throw new Error(
-          `Path parameter${missingParams.length > 1 ? "s" : ""} ${missingNames} in "${props.path}" ${missingParams.length > 1 ? "are" : "is"} not defined in the input schema`
-        );
-      }
-
-      return pathKeys.map((key) => {
-        const fieldSchema = props.input.shape[key.name];
-        const { schema } = createSchema(fieldSchema);
-
-        return {
-          name: String(key.name),
-          in: "path" as oas31.ParameterLocation,
-          required: true, // Path params are always required
-          schema: schema,
-        };
-      });
-    })(),
+      return {
+        name: String(key.name),
+        in: "path" as oas31.ParameterLocation,
+        required: true, // Path params are always required
+        schema: schema,
+      };
+    }),
   ];
 
   const openAPIRequestBody:
