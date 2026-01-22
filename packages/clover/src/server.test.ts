@@ -297,6 +297,28 @@ describe("makeRequestHandler", () => {
     expect(response.status).toBe(401);
   });
 
+  it("should return a 401 if the authenticate function throws an error", async () => {
+    const { handler } = makeRequestHandler({
+      input: z.object({ name: z.string() }),
+      output: z.object({ greeting: z.string() }),
+      method: "GET",
+      path: "/api/hello",
+      run: async ({ input, sendOutput }) => {
+        return sendOutput({ greeting: `Hello, ${input.name}!` });
+      },
+      authenticate: async () => {
+        throw new Error("Auth service unavailable");
+      },
+    });
+
+    const response = await handler(
+      new Request("http://test.com/api/hello?name=test")
+    );
+
+    // Auth errors should fail closed (return 401), not fail open
+    expect(response.status).toBe(401);
+  });
+
   it("should allow an explicit error response", async () => {
     const { handler } = makeRequestHandler({
       input: z.object({ name: z.string() }),

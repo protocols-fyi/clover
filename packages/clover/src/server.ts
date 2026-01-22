@@ -270,33 +270,35 @@ export const makeRequestHandler = <
       return commonReponses[405].response();
     }
 
-    let authenticationResult = false;
+    // Handle authentication if required
+    if (props.authenticate) {
+      let isAuthenticated = false;
 
-    try {
-      authenticationResult =
-        props.authenticate !== undefined &&
-        !(await props.authenticate(requestForAuth));
-    } catch (error) {
-      logger.log(
-        "error",
-        `${getLoggingPrefix(request)} error during authentication check`,
-        {
-          error: error instanceof Error ? error : new Error(String(error)),
-          url: request.url,
-        }
-      );
-    }
+      try {
+        isAuthenticated = await props.authenticate(requestForAuth);
+      } catch (error) {
+        logger.log(
+          "error",
+          `${getLoggingPrefix(request)} error during authentication check`,
+          {
+            error: error instanceof Error ? error : new Error(String(error)),
+            url: request.url,
+          }
+        );
+        // Fail closed: auth errors should reject the request
+        return commonReponses[401].response();
+      }
 
-    // ensure authentication is correct
-    if (authenticationResult) {
-      logger.log(
-        "debug",
-        `${getLoggingPrefix(request)} authentication check returned false`,
-        {
-          url: request.url,
-        }
-      );
-      return commonReponses[401].response();
+      if (!isAuthenticated) {
+        logger.log(
+          "debug",
+          `${getLoggingPrefix(request)} authentication check returned false`,
+          {
+            url: request.url,
+          }
+        );
+        return commonReponses[401].response();
+      }
     }
 
     // parse the input
