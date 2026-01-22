@@ -10,7 +10,51 @@ import {
   httpMethodSupportsRequestBody,
   toOpenAPIPath,
 } from "./utils";
-import { getLogger, formatLogPayload } from "./logger";
+import { getLogger, formatLogPayload, ILogger } from "./logger";
+
+function getLoggingPrefix(request: Request): string {
+  const url = new URL(request.url);
+  return `Handler ${request.method} ${url.pathname}`;
+}
+
+/**
+ * Extract raw input data from request (path params, query params, or body)
+ * before Zod validation
+ */
+async function extractRawInput(
+  request: Request,
+  path: string,
+  logger: ILogger
+): Promise<Record<string, unknown>> {
+  const url = new URL(request.url);
+  const logPrefix = getLoggingPrefix(request);
+
+  // Extract path parameters
+  const pathParams = getParamsFromPath(path, url.pathname);
+
+  // Extract body or query parameters based on HTTP method
+  let bodyOrQueryParams: Record<string, unknown> = {};
+
+  if (httpMethodSupportsRequestBody[request.method as HTTPMethod]) {
+    try {
+      bodyOrQueryParams = await request.json();
+    } catch (error) {
+      logger.log("warn", `${logPrefix} error parsing request body`, {
+        error: error instanceof Error ? error : new Error(String(error)),
+        url: request.url,
+      });
+      // Return empty object if body is not valid JSON
+      bodyOrQueryParams = {};
+    }
+  } else {
+    bodyOrQueryParams = Object.fromEntries(url.searchParams.entries());
+  }
+
+  return {
+    ...pathParams,
+    ...bodyOrQueryParams,
+  };
+}
 
 export interface IMakeRequestHandlerProps<
   TInput extends z.ZodObject<any, any>,
@@ -148,11 +192,6 @@ export const makeRequestHandler = <
 >(
   props: IMakeRequestHandlerProps<TInput, TOutput, TMethod, TPath>
 ): IMakeRequestHandlerReturn<TInput, TOutput, TMethod, TPath> => {
-  const getLoggingPrefix = (request: Request) => {
-    const url = new URL(request.url);
-    return `Handler ${request.method} ${url.pathname}`;
-  };
-
   const pathKeys = getKeysFromPathPattern(props.path);
   const pathKeyNames = new Set(pathKeys.map((k) => String(k.name)));
 
@@ -251,14 +290,15 @@ export const makeRequestHandler = <
     const logger = getLogger();
     const requestForRun = request.clone();
     const requestForAuth = request.clone();
+    const loggingPrefix = getLoggingPrefix(request);
 
-    logger.log("debug", `${getLoggingPrefix(request)} begin`);
+    logger.log("debug", `${loggingPrefix} begin`);
 
     // ensure the method is correct
     if (request.method !== props.method) {
       logger.log(
         "warn",
-        `${getLoggingPrefix(request)} invalid HTTP method: received ${
+        `${loggingPrefix} invalid HTTP method: received ${
           request.method
         }, expected ${props.method}`,
         {
@@ -279,7 +319,7 @@ export const makeRequestHandler = <
       } catch (error) {
         logger.log(
           "error",
-          `${getLoggingPrefix(request)} error during authentication check`,
+          `${loggingPrefix} error during authentication check`,
           {
             error: error instanceof Error ? error : new Error(String(error)),
             url: request.url,
@@ -292,7 +332,7 @@ export const makeRequestHandler = <
       if (!isAuthenticated) {
         logger.log(
           "debug",
-          `${getLoggingPrefix(request)} authentication check returned false`,
+          `${loggingPrefix} authentication check returned false`,
           {
             url: request.url,
           }
@@ -301,29 +341,8 @@ export const makeRequestHandler = <
       }
     }
 
-    // parse the input
-    const unsafeData = {
-      // parse input from path parameters
-      ...getParamsFromPath(props.path, new URL(request.url).pathname),
-      // parse input from query parameters or body
-      ...(httpMethodSupportsRequestBody[request.method as HTTPMethod]
-        ? // if the method supports a body, parse it
-          await request.json().catch((error) => {
-            logger.log(
-              "warn",
-              `${getLoggingPrefix(request)} error parsing request body`,
-              {
-                error:
-                  error instanceof Error ? error : new Error(String(error)),
-                url: request.url,
-              }
-            );
-            // Just return an empty object if the body is not valid JSON
-            return {};
-          })
-        : // otherwise, parse the query parameters
-          Object.fromEntries(new URL(request.url).searchParams.entries())),
-    };
+    // Extract raw input from request
+    const unsafeData = await extractRawInput(request, props.path, logger);
 
     // parse the input with zod schema
     const parsedData = await props.input.safeParseAsync(unsafeData);
@@ -332,7 +351,7 @@ export const makeRequestHandler = <
     if (!parsedData.success) {
       logger.log(
         "warn",
-        `${getLoggingPrefix(request)} request validation failed`,
+        `${loggingPrefix} request validation failed`,
         {
           validationError: parsedData.error,
           receivedInput: unsafeData,
@@ -351,7 +370,7 @@ export const makeRequestHandler = <
     ) => {
       logger.log(
         "debug",
-        `${getLoggingPrefix(request)} success ${options?.status ?? 200}`
+        `${loggingPrefix} success ${options?.status ?? 200}`
       );
       return new Response(
         JSON.stringify(output),
@@ -372,7 +391,7 @@ export const makeRequestHandler = <
       message,
       data,
     }: { status: number } & ErrorResponse) => {
-      logger.log("debug", `${getLoggingPrefix(request)} error ${status}`);
+      logger.log("debug", `${loggingPrefix} error ${status}`);
       return new Response(JSON.stringify({ message, data }), {
         status,
         headers: {
@@ -392,14 +411,14 @@ export const makeRequestHandler = <
 
       logger.log(
         "debug",
-        `${getLoggingPrefix(request)} success ${response.status}`
+        `${loggingPrefix} success ${response.status}`
       );
 
       return response;
     } catch (error) {
       logger.log(
         "error",
-        `${getLoggingPrefix(request)} unhandled error when handling request`,
+        `${loggingPrefix} unhandled error when handling request`,
         {
           error: error instanceof Error ? error : new Error(String(error)),
           input,
