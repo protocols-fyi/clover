@@ -1,16 +1,15 @@
 import merge from "lodash.merge";
 import { oas31 } from "openapi3-ts";
 import { z } from "zod";
-import { createSchema } from "zod-openapi";
 import { commonReponses } from "./responses";
 import {
   HTTPMethod,
   getKeysFromPathPattern,
   getParamsFromPath,
   httpMethodSupportsRequestBody,
-  toOpenAPIPath,
 } from "./utils";
 import { getLogger, formatLogPayload, ILogger } from "./logger";
+import { buildOpenAPIPathsObject } from "./openapi";
 
 function getLoggingPrefix(request: Request): string {
   const url = new URL(request.url);
@@ -192,10 +191,8 @@ export const makeRequestHandler = <
 >(
   props: IMakeRequestHandlerProps<TInput, TOutput, TMethod, TPath>
 ): IMakeRequestHandlerReturn<TInput, TOutput, TMethod, TPath> => {
-  const pathKeys = getKeysFromPathPattern(props.path);
-  const pathKeyNames = new Set(pathKeys.map((k) => String(k.name)));
-
   // Validate that all path parameters are defined in the input schema
+  const pathKeys = getKeysFromPathPattern(props.path);
   const missingParams = pathKeys.filter(
     (key) => !(key.name in props.input.shape)
   );
@@ -206,85 +203,15 @@ export const makeRequestHandler = <
     );
   }
 
-  const openAPIParameters: (oas31.ParameterObject | oas31.ReferenceObject)[] = [
-    // query parameters
-    ...(!httpMethodSupportsRequestBody[props.method]
-      ? Object.keys(props.input.shape)
-          // exclude query parameters that are already path parameters
-          .filter((key) => !pathKeyNames.has(key))
-          .map((key) => {
-            const fieldSchema = props.input.shape[key];
-            const { schema } = createSchema(fieldSchema);
-
-            // Determine if parameter is required by checking if it's optional
-            const isOptional = fieldSchema.isOptional?.() ?? false;
-
-            return {
-              name: key,
-              in: "query" as oas31.ParameterLocation,
-              required: !isOptional,
-              schema: schema,
-            };
-          })
-      : []),
-    // path parameters
-    ...pathKeys.map((key) => {
-      const fieldSchema = props.input.shape[key.name];
-      const { schema } = createSchema(fieldSchema);
-
-      return {
-        name: String(key.name),
-        in: "path" as oas31.ParameterLocation,
-        required: true, // Path params are always required
-        schema: schema,
-      };
-    }),
-  ];
-
-  const openAPIRequestBody:
-    | oas31.ReferenceObject
-    | oas31.RequestBodyObject
-    | undefined = httpMethodSupportsRequestBody[props.method]
-    ? {
-        content: {
-          "application/json": {
-            schema: createSchema(props.input).schema,
-          },
-        },
-      }
-    : undefined;
-
-  const openAPIOperation: oas31.OperationObject = {
+  const openAPIPathsObject = buildOpenAPIPathsObject({
+    input: props.input,
+    output: props.output,
+    method: props.method,
+    path: props.path,
     description: props.description,
-    parameters: openAPIParameters,
-    requestBody: openAPIRequestBody,
-    responses: {
-      // success
-      200: {
-        description: "Success",
-        content: {
-          "application/json": {
-            schema: createSchema(props.output).schema,
-          },
-        },
-      },
-      // bad request
-      400: commonReponses[400].openAPISchema,
-      // unauthorized
-      401: props.authenticate ? commonReponses[401].openAPISchema : undefined,
-      // sarim: i don't think we need this
-      // 405: commonReponses[405].openAPISchema,
-    },
     tags: props.tags,
-  };
-
-  const openAPIPathItem: oas31.PathItemObject = {
-    [props.method.toLowerCase()]: openAPIOperation,
-  };
-
-  const openAPIPath: oas31.PathsObject = {
-    [toOpenAPIPath(props.path)]: openAPIPathItem,
-  };
+    requiresAuth: !!props.authenticate,
+  });
 
   const handler = async (request: Request) => {
     const logger = getLogger();
@@ -436,7 +363,7 @@ export const makeRequestHandler = <
       method: props.method,
       path: props.path,
     },
-    openAPIPathsObject: openAPIPath,
+    openAPIPathsObject,
     handler,
   };
 };

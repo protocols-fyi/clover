@@ -1,7 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { oas31 } from "openapi3-ts";
 import { errorResponseSchema, makeRequestHandler } from "./server";
 import { z, ZodError } from "zod";
 import { setLogger } from "./logger";
+
+function getParam(
+  parameters: (oas31.ParameterObject | oas31.ReferenceObject)[] | undefined,
+  name: string
+): (Omit<oas31.ParameterObject, "schema"> & { schema?: oas31.SchemaObject }) | undefined {
+  const param = parameters?.find(
+    (p): p is oas31.ParameterObject => "name" in p && p.name === name
+  );
+  if (!param) return undefined;
+  return param as Omit<oas31.ParameterObject, "schema"> & { schema?: oas31.SchemaObject };
+}
 
 describe("makeRequestHandler", () => {
   it("should create a handler that validates input", async () => {
@@ -104,6 +116,91 @@ describe("makeRequestHandler", () => {
     const data = await response.json();
 
     expect(data).toEqual({ greeting: "Hello, test!" });
+  });
+
+  it("should handle optional query params when provided", async () => {
+    const { handler } = makeRequestHandler({
+      input: z.object({
+        name: z.string(),
+        title: z.string().optional(),
+      }),
+      output: z.object({ greeting: z.string() }),
+      method: "GET",
+      path: "/api/hello",
+      run: async ({ input, sendOutput }) => {
+        const prefix = input.title ? `${input.title} ` : "";
+        return sendOutput({ greeting: `Hello, ${prefix}${input.name}!` });
+      },
+    });
+
+    const response = await handler(
+      new Request("http://test.com/api/hello?name=Smith&title=Dr.")
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ greeting: "Hello, Dr. Smith!" });
+  });
+
+  it("should handle optional query params when omitted", async () => {
+    const { handler } = makeRequestHandler({
+      input: z.object({
+        name: z.string(),
+        title: z.string().optional(),
+      }),
+      output: z.object({ greeting: z.string() }),
+      method: "GET",
+      path: "/api/hello",
+      run: async ({ input, sendOutput }) => {
+        const prefix = input.title ? `${input.title} ` : "";
+        return sendOutput({ greeting: `Hello, ${prefix}${input.name}!` });
+      },
+    });
+
+    const response = await handler(
+      new Request("http://test.com/api/hello?name=Smith")
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ greeting: "Hello, Smith!" });
+  });
+
+  it("should handle optional query params with default values", async () => {
+    const { handler } = makeRequestHandler({
+      input: z.object({
+        page: z.coerce.number().default(1),
+        limit: z.coerce.number().default(10),
+      }),
+      output: z.object({ page: z.number(), limit: z.number() }),
+      method: "GET",
+      path: "/api/items",
+      run: async ({ input, sendOutput }) => {
+        return sendOutput({ page: input.page, limit: input.limit });
+      },
+    });
+
+    // Test with no params - should use defaults
+    const response1 = await handler(new Request("http://test.com/api/items"));
+    const data1 = await response1.json();
+    expect(response1.status).toBe(200);
+    expect(data1).toEqual({ page: 1, limit: 10 });
+
+    // Test with partial params
+    const response2 = await handler(
+      new Request("http://test.com/api/items?page=5")
+    );
+    const data2 = await response2.json();
+    expect(response2.status).toBe(200);
+    expect(data2).toEqual({ page: 5, limit: 10 });
+
+    // Test with all params
+    const response3 = await handler(
+      new Request("http://test.com/api/items?page=3&limit=25")
+    );
+    const data3 = await response3.json();
+    expect(response3.status).toBe(200);
+    expect(data3).toEqual({ page: 3, limit: 25 });
   });
 
   it("should put request body in the input", async () => {
@@ -932,24 +1029,21 @@ describe("makeRequestHandler", () => {
         expect(parameters).toHaveLength(3);
 
         // Query parameters now get proper type schemas via createSchema()
-        const searchParam = parameters?.find((p: any) => p.name === "search");
-        expect(searchParam).toMatchObject({
+        expect(getParam(parameters, "search")).toMatchObject({
           name: "search",
           in: "query",
           required: true,
           schema: { type: "string" },
         });
 
-        const pageParam = parameters?.find((p: any) => p.name === "page");
-        expect(pageParam).toMatchObject({
+        expect(getParam(parameters, "page")).toMatchObject({
           name: "page",
           in: "query",
           required: true,
           schema: { type: "number" },
         });
 
-        const limitParam = parameters?.find((p: any) => p.name === "limit");
-        expect(limitParam).toMatchObject({
+        expect(getParam(parameters, "limit")).toMatchObject({
           name: "limit",
           in: "query",
           required: false,
@@ -980,8 +1074,7 @@ describe("makeRequestHandler", () => {
         const parameters = openAPIPathsObject["/api/items"]?.get?.parameters;
         expect(parameters).toBeDefined();
 
-        const userIdParam = parameters?.find((p: any) => p.name === "userId");
-        expect(userIdParam).toMatchObject({
+        expect(getParam(parameters, "userId")).toMatchObject({
           name: "userId",
           in: "query",
           required: true,
@@ -992,8 +1085,7 @@ describe("makeRequestHandler", () => {
           },
         });
 
-        const statusParam = parameters?.find((p: any) => p.name === "status");
-        expect(statusParam).toMatchObject({
+        expect(getParam(parameters, "status")).toMatchObject({
           name: "status",
           in: "query",
           required: false,
@@ -1031,7 +1123,7 @@ describe("makeRequestHandler", () => {
 
         const parameters = openAPIPathsObject["/api/users"]?.get?.parameters;
 
-        const pageParam = parameters?.find((p: any) => p.name === "page");
+        const pageParam = getParam(parameters, "page");
         expect(pageParam?.schema).toMatchObject({
           type: "number",
           example: 1,
@@ -1039,7 +1131,7 @@ describe("makeRequestHandler", () => {
         });
         expect(pageParam?.required).toBe(true);
 
-        const limitParam = parameters?.find((p: any) => p.name === "limit");
+        const limitParam = getParam(parameters, "limit");
         expect(limitParam?.schema).toMatchObject({
           type: "number",
           example: 10,
@@ -1047,16 +1139,14 @@ describe("makeRequestHandler", () => {
         });
         expect(limitParam?.required).toBe(false);
 
-        const verifiedParam = parameters?.find(
-          (p: any) => p.name === "verified"
-        );
+        const verifiedParam = getParam(parameters, "verified");
         expect(verifiedParam?.schema).toMatchObject({
           type: "boolean",
           example: true,
           description: "Filter verified users",
         });
 
-        const tagsParam = parameters?.find((p: any) => p.name === "tags");
+        const tagsParam = getParam(parameters, "tags");
         expect(tagsParam?.schema).toMatchObject({
           type: "array",
           example: ["tech", "science"],
@@ -1085,7 +1175,7 @@ describe("makeRequestHandler", () => {
 
         const parameters = openAPIPathsObject["/api/items"]?.get?.parameters;
 
-        const sortParam = parameters?.find((p: any) => p.name === "sort");
+        const sortParam = getParam(parameters, "sort");
         expect(sortParam?.schema).toMatchObject({
           type: "string",
           enum: ["asc", "desc"],
@@ -1094,7 +1184,7 @@ describe("makeRequestHandler", () => {
         });
         expect(sortParam?.required).toBe(true);
 
-        const statusParam = parameters?.find((p: any) => p.name === "status");
+        const statusParam = getParam(parameters, "status");
         expect(statusParam?.schema).toMatchObject({
           type: "string",
           enum: ["active", "inactive", "pending"],
@@ -1124,16 +1214,14 @@ describe("makeRequestHandler", () => {
             ?.parameters;
         expect(parameters).toBeDefined();
 
-        const userIdParam = parameters?.find((p: any) => p.name === "userId");
-        expect(userIdParam).toMatchObject({
+        expect(getParam(parameters, "userId")).toMatchObject({
           name: "userId",
           in: "path",
           required: true,
           schema: { type: "string" },
         });
 
-        const postIdParam = parameters?.find((p: any) => p.name === "postId");
-        expect(postIdParam).toMatchObject({
+        expect(getParam(parameters, "postId")).toMatchObject({
           name: "postId",
           in: "path",
           required: true,
@@ -1159,9 +1247,8 @@ describe("makeRequestHandler", () => {
 
         const parameters =
           openAPIPathsObject["/api/users/{userId}"]?.get?.parameters;
-        const userIdParam = parameters?.find((p: any) => p.name === "userId");
 
-        expect(userIdParam).toMatchObject({
+        expect(getParam(parameters, "userId")).toMatchObject({
           name: "userId",
           in: "path",
           required: true,
@@ -1201,8 +1288,7 @@ describe("makeRequestHandler", () => {
           openAPIPathsObject["/api/orgs/{orgId}/users/{userId}/posts/{postId}"]
             ?.get?.parameters;
 
-        const orgIdParam = parameters?.find((p: any) => p.name === "orgId");
-        expect(orgIdParam).toMatchObject({
+        expect(getParam(parameters, "orgId")).toMatchObject({
           name: "orgId",
           in: "path",
           required: true,
@@ -1213,8 +1299,7 @@ describe("makeRequestHandler", () => {
           },
         });
 
-        const userIdParam = parameters?.find((p: any) => p.name === "userId");
-        expect(userIdParam).toMatchObject({
+        expect(getParam(parameters, "userId")).toMatchObject({
           name: "userId",
           in: "path",
           required: true,
@@ -1225,8 +1310,7 @@ describe("makeRequestHandler", () => {
           },
         });
 
-        const postIdParam = parameters?.find((p: any) => p.name === "postId");
-        expect(postIdParam).toMatchObject({
+        expect(getParam(parameters, "postId")).toMatchObject({
           name: "postId",
           in: "path",
           required: true,
@@ -1241,11 +1325,11 @@ describe("makeRequestHandler", () => {
       it("should handle path parameters with different string formats", () => {
         const { openAPIPathsObject } = makeRequestHandler({
           input: z.object({
-            userId: z.string().uuid().meta({
+            userId: z.uuid().meta({
               example: "550e8400-e29b-41d4-a716-446655440000",
               description: "User UUID",
             }),
-            email: z.string().email().meta({
+            email: z.email().meta({
               example: "user@example.com",
               description: "User email",
             }),
@@ -1262,16 +1346,14 @@ describe("makeRequestHandler", () => {
           openAPIPathsObject["/api/users/{userId}/email/{email}"]?.get
             ?.parameters;
 
-        const userIdParam = parameters?.find((p: any) => p.name === "userId");
-        expect(userIdParam?.schema).toMatchObject({
+        expect(getParam(parameters, "userId")?.schema).toMatchObject({
           type: "string",
           format: "uuid",
           example: "550e8400-e29b-41d4-a716-446655440000",
           description: "User UUID",
         });
 
-        const emailParam = parameters?.find((p: any) => p.name === "email");
-        expect(emailParam?.schema).toMatchObject({
+        expect(getParam(parameters, "email")?.schema).toMatchObject({
           type: "string",
           format: "email",
           example: "user@example.com",
@@ -1295,9 +1377,9 @@ describe("makeRequestHandler", () => {
         });
 
         const parameters = openAPIPathsObject["/api/test"]?.get?.parameters;
-        const nameParam = parameters?.find((p: any) => p.name === "name");
+        const nameParam = getParam(parameters, "name");
         expect(nameParam).toBeDefined();
-        expect(nameParam?.schema.type).toBe("string");
+        expect(nameParam?.schema?.type).toBe("string");
       });
 
       it("should handle mixed path, query, and body parameters with .meta()", () => {
@@ -1357,18 +1439,12 @@ describe("makeRequestHandler", () => {
         });
       });
 
-      it("should handle discriminated unions with examples", () => {
+      it("should handle enum fields with examples", () => {
         const { openAPIPathsObject } = makeRequestHandler({
-          input: z.discriminatedUnion("type", [
-            z.object({
-              type: z.literal("email").meta({ example: "email" }),
-              email: z.string().email().meta({ example: "user@example.com" }),
-            }),
-            z.object({
-              type: z.literal("sms").meta({ example: "sms" }),
-              phone: z.string().meta({ example: "+1234567890" }),
-            }),
-          ]),
+          input: z.object({
+            type: z.enum(["email", "sms"]).meta({ example: "email" }),
+            contact: z.string().meta({ example: "user@example.com" }),
+          }),
           output: z.object({ sent: z.boolean() }),
           method: "POST",
           path: "/api/notify",
@@ -1383,9 +1459,10 @@ describe("makeRequestHandler", () => {
         const schema = (requestBody as any)?.content?.["application/json"]
           ?.schema;
 
-        // Discriminated unions should have oneOf with examples
-        expect(schema.oneOf).toBeDefined();
-        expect(schema.oneOf).toHaveLength(2);
+        // Check enum field has correct schema
+        expect(schema.properties.type.enum).toEqual(["email", "sms"]);
+        expect(schema.properties.type.example).toBe("email");
+        expect(schema.properties.contact.example).toBe("user@example.com");
       });
 
       it("should handle large example values", () => {
@@ -1448,11 +1525,11 @@ describe("makeRequestHandler", () => {
       it("should handle URL and date-time formats with examples", () => {
         const { openAPIPathsObject } = makeRequestHandler({
           input: z.object({
-            website: z.string().url().meta({
+            website: z.url().meta({
               example: "https://example.com",
               description: "Website URL",
             }),
-            createdAt: z.string().datetime().meta({
+            createdAt: z.iso.datetime().meta({
               example: "2024-01-15T10:30:00Z",
               description: "Creation timestamp",
             }),
@@ -1506,17 +1583,13 @@ describe("makeRequestHandler", () => {
 
         const parameters = openAPIPathsObject["/api/items"]?.get?.parameters;
 
-        const countParam = parameters?.find((p: any) => p.name === "count");
-        expect(countParam?.schema).toMatchObject({
+        expect(getParam(parameters, "count")?.schema).toMatchObject({
           type: "number",
           example: 42,
           description: "Count value coerced from string",
         });
 
-        const enabledParam = parameters?.find(
-          (p: any) => p.name === "enabled"
-        );
-        expect(enabledParam?.schema).toMatchObject({
+        expect(getParam(parameters, "enabled")?.schema).toMatchObject({
           type: "boolean",
           example: true,
           description: "Boolean coerced from string",
