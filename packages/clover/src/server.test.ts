@@ -416,6 +416,42 @@ describe("makeRequestHandler", () => {
     expect(response.status).toBe(401);
   });
 
+  it("should not call run when authentication fails", async () => {
+    const runMock = vi.fn().mockResolvedValue(new Response("should not reach"));
+
+    const { handler } = makeRequestHandler({
+      input: z.object({ name: z.string() }),
+      output: z.object({ greeting: z.string() }),
+      method: "GET",
+      path: "/api/hello",
+      run: runMock,
+      authenticate: async () => false,
+    });
+
+    await handler(new Request("http://test.com/api/hello?name=test"));
+
+    expect(runMock).not.toHaveBeenCalled();
+  });
+
+  it("should call authenticate when provided", async () => {
+    const authMock = vi.fn().mockResolvedValue(true);
+
+    const { handler } = makeRequestHandler({
+      input: z.object({ name: z.string() }),
+      output: z.object({ greeting: z.string() }),
+      method: "GET",
+      path: "/api/hello",
+      run: async ({ sendOutput }) => {
+        return sendOutput({ greeting: "Hello!" });
+      },
+      authenticate: authMock,
+    });
+
+    await handler(new Request("http://test.com/api/hello?name=test"));
+
+    expect(authMock).toHaveBeenCalledTimes(1);
+  });
+
   it("should allow an explicit error response", async () => {
     const { handler } = makeRequestHandler({
       input: z.object({ name: z.string() }),

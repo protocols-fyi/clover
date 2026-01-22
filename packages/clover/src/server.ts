@@ -8,7 +8,7 @@ import {
   getParamsFromPath,
   httpMethodSupportsRequestBody,
 } from "./utils";
-import { getLogger, formatLogPayload, ILogger } from "./logger";
+import { getLogger, ILogger } from "./logger";
 import { buildOpenAPIPathsObject } from "./openapi";
 
 function getLoggingPrefix(request: Request): string {
@@ -53,6 +53,71 @@ async function extractRawInput(
     ...pathParams,
     ...bodyOrQueryParams,
   };
+}
+
+/**
+ * Handle authentication if required
+ * @returns Discriminated union - must check `success` before proceeding
+ */
+async function handleAuthentication(
+  authenticate: ((request: Request) => Promise<boolean>) | undefined,
+  request: Request,
+  logger: ILogger,
+  loggingPrefix: string
+): Promise<{ success: true } | { success: false; response: Response }> {
+  if (!authenticate) {
+    return { success: true };
+  }
+
+  const requestForAuth = request.clone();
+  let isAuthenticated = false;
+
+  try {
+    isAuthenticated = await authenticate(requestForAuth);
+  } catch (error) {
+    logger.log("error", `${loggingPrefix} error during authentication check`, {
+      error: error instanceof Error ? error : new Error(String(error)),
+      url: request.url,
+    });
+    // Fail closed: auth errors should reject the request
+    return { success: false, response: commonReponses[401].response() };
+  }
+
+  if (!isAuthenticated) {
+    logger.log("debug", `${loggingPrefix} authentication check returned false`, {
+      url: request.url,
+    });
+    return { success: false, response: commonReponses[401].response() };
+  }
+
+  return { success: true };
+}
+
+/**
+ * Validate input data against a Zod schema
+ * @returns Object with validated data on success, or Response on failure
+ */
+async function validateInput<TInput extends z.ZodObject<any, any>>(
+  schema: TInput,
+  unsafeData: Record<string, unknown>,
+  logger: ILogger,
+  loggingPrefix: string,
+  url: string
+): Promise<
+  { success: true; data: z.infer<TInput> } | { success: false; response: Response }
+> {
+  const parsedData = await schema.safeParseAsync(unsafeData);
+
+  if (!parsedData.success) {
+    logger.log("warn", `${loggingPrefix} request validation failed`, {
+      validationError: parsedData.error,
+      receivedInput: unsafeData,
+      url,
+    });
+    return { success: false, response: commonReponses[400].response(parsedData.error) };
+  }
+
+  return { success: true, data: parsedData.data };
 }
 
 export interface IMakeRequestHandlerProps<
@@ -216,7 +281,6 @@ export const makeRequestHandler = <
   const handler = async (request: Request) => {
     const logger = getLogger();
     const requestForRun = request.clone();
-    const requestForAuth = request.clone();
     const loggingPrefix = getLoggingPrefix(request);
 
     logger.log("debug", `${loggingPrefix} begin`);
@@ -238,57 +302,26 @@ export const makeRequestHandler = <
     }
 
     // Handle authentication if required
-    if (props.authenticate) {
-      let isAuthenticated = false;
+    const authResult = await handleAuthentication(
+      props.authenticate,
+      request,
+      logger,
+      loggingPrefix
+    );
+    if (!authResult.success) return authResult.response;
 
-      try {
-        isAuthenticated = await props.authenticate(requestForAuth);
-      } catch (error) {
-        logger.log(
-          "error",
-          `${loggingPrefix} error during authentication check`,
-          {
-            error: error instanceof Error ? error : new Error(String(error)),
-            url: request.url,
-          }
-        );
-        // Fail closed: auth errors should reject the request
-        return commonReponses[401].response();
-      }
-
-      if (!isAuthenticated) {
-        logger.log(
-          "debug",
-          `${loggingPrefix} authentication check returned false`,
-          {
-            url: request.url,
-          }
-        );
-        return commonReponses[401].response();
-      }
-    }
-
-    // Extract raw input from request
+    // Extract and validate input
     const unsafeData = await extractRawInput(request, props.path, logger);
+    const validationResult = await validateInput(
+      props.input,
+      unsafeData,
+      logger,
+      loggingPrefix,
+      request.url
+    );
+    if (!validationResult.success) return validationResult.response;
 
-    // parse the input with zod schema
-    const parsedData = await props.input.safeParseAsync(unsafeData);
-
-    // if the input is invalid, return a 400
-    if (!parsedData.success) {
-      logger.log(
-        "warn",
-        `${loggingPrefix} request validation failed`,
-        {
-          validationError: parsedData.error,
-          receivedInput: unsafeData,
-          url: request.url,
-        }
-      );
-      return commonReponses[400].response(parsedData.error);
-    }
-
-    const input = parsedData.data;
+    const input = validationResult.data;
 
     // utility function to send output response
     const sendOutput = async (
