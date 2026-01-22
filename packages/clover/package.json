@@ -16,6 +16,7 @@
       "require": "./dist/index.cjs"
     }
   },
+  "homepage": "https://protocols-fyi.github.io/clover/",
   "repository": {
     "type": "git",
     "url": "https://github.com/protocols-fyi/clover.git",
