@@ -329,19 +329,12 @@ export const makeRequestHandler = <
 
     // run the user's code
     try {
-      const response = await props.run({
+      return await props.run({
         request: requestForRun,
         input,
         sendOutput,
         sendError,
       });
-
-      logger.log(
-        "debug",
-        `${loggingPrefix} success ${response.status}`
-      );
-
-      return response;
     } catch (error) {
       logger.log(
         "error",
