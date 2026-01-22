@@ -10,4 +10,6 @@ Previously, if your `authenticate` callback threw an error (e.g., database conne
 
 Also includes:
 - Improved error message when path parameters are missing from input schema (e.g., `Path parameter "id" in "/api/posts/:id" is not defined in the input schema`)
-- Internal refactoring of `makeRequestHandler` for better readability
+- Added OpenAPI schema generation via `buildOpenAPIPathsObject` - each route now exposes an `openAPIPathsObject` property
+- Refactored `makeRequestHandler` internals: extracted `handleAuthentication` and `validateInput` helper functions for better readability
+- Added tests for authentication behavior (verify `authenticate` is called, verify `run` is not called when auth fails)
