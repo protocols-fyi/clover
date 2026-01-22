@@ -1,16 +1,124 @@
 import merge from "lodash.merge";
 import { oas31 } from "openapi3-ts";
 import { z } from "zod";
-import { createSchema } from "zod-openapi";
 import { commonReponses } from "./responses";
 import {
   HTTPMethod,
   getKeysFromPathPattern,
   getParamsFromPath,
   httpMethodSupportsRequestBody,
-  toOpenAPIPath,
 } from "./utils";
-import { getLogger, formatLogPayload } from "./logger";
+import { getLogger, ILogger } from "./logger";
+import { buildOpenAPIPathsObject } from "./openapi";
+
+function getLoggingPrefix(request: Request): string {
+  const url = new URL(request.url);
+  return `Handler ${request.method} ${url.pathname}`;
+}
+
+/**
+ * Extract raw input data from request (path params, query params, or body)
+ * before Zod validation
+ */
+async function extractRawInput(
+  request: Request,
+  path: string,
+  logger: ILogger
+): Promise<Record<string, unknown>> {
+  const url = new URL(request.url);
+  const logPrefix = getLoggingPrefix(request);
+
+  // Extract path parameters
+  const pathParams = getParamsFromPath(path, url.pathname);
+
+  // Extract body or query parameters based on HTTP method
+  let bodyOrQueryParams: Record<string, unknown> = {};
+
+  if (httpMethodSupportsRequestBody[request.method as HTTPMethod]) {
+    try {
+      bodyOrQueryParams = await request.json();
+    } catch (error) {
+      logger.log("warn", `${logPrefix} error parsing request body`, {
+        error: error instanceof Error ? error : new Error(String(error)),
+        url: request.url,
+      });
+      // Return empty object if body is not valid JSON
+      bodyOrQueryParams = {};
+    }
+  } else {
+    bodyOrQueryParams = Object.fromEntries(url.searchParams.entries());
+  }
+
+  return {
+    ...pathParams,
+    ...bodyOrQueryParams,
+  };
+}
+
+/**
+ * Handle authentication if required
+ * @returns Discriminated union - must check `success` before proceeding
+ */
+async function handleAuthentication(
+  authenticate: ((request: Request) => Promise<boolean>) | undefined,
+  request: Request,
+  logger: ILogger,
+  loggingPrefix: string
+): Promise<{ success: true } | { success: false; response: Response }> {
+  if (!authenticate) {
+    return { success: true };
+  }
+
+  const requestForAuth = request.clone();
+  let isAuthenticated = false;
+
+  try {
+    isAuthenticated = await authenticate(requestForAuth);
+  } catch (error) {
+    logger.log("error", `${loggingPrefix} error during authentication check`, {
+      error: error instanceof Error ? error : new Error(String(error)),
+      url: request.url,
+    });
+    // Fail closed: auth errors should reject the request
+    return { success: false, response: commonReponses[401].response() };
+  }
+
+  if (!isAuthenticated) {
+    logger.log("debug", `${loggingPrefix} authentication check returned false`, {
+      url: request.url,
+    });
+    return { success: false, response: commonReponses[401].response() };
+  }
+
+  return { success: true };
+}
+
+/**
+ * Validate input data against a Zod schema
+ * @returns Object with validated data on success, or Response on failure
+ */
+async function validateInput<TInput extends z.ZodObject<any, any>>(
+  schema: TInput,
+  unsafeData: Record<string, unknown>,
+  logger: ILogger,
+  loggingPrefix: string,
+  url: string
+): Promise<
+  { success: true; data: z.infer<TInput> } | { success: false; response: Response }
+> {
+  const parsedData = await schema.safeParseAsync(unsafeData);
+
+  if (!parsedData.success) {
+    logger.log("warn", `${loggingPrefix} request validation failed`, {
+      validationError: parsedData.error,
+      receivedInput: unsafeData,
+      url,
+    });
+    return { success: false, response: commonReponses[400].response(parsedData.error) };
+  }
+
+  return { success: true, data: parsedData.data };
+}
 
 export interface IMakeRequestHandlerProps<
   TInput extends z.ZodObject<any, any>,
@@ -148,107 +256,40 @@ export const makeRequestHandler = <
 >(
   props: IMakeRequestHandlerProps<TInput, TOutput, TMethod, TPath>
 ): IMakeRequestHandlerReturn<TInput, TOutput, TMethod, TPath> => {
-  const getLoggingPrefix = (request: Request) => {
-    const url = new URL(request.url);
-    return `Handler ${request.method} ${url.pathname}`;
-  };
+  // Validate that all path parameters are defined in the input schema
+  const pathKeys = getKeysFromPathPattern(props.path);
+  const missingParams = pathKeys.filter(
+    (key) => !(key.name in props.input.shape)
+  );
+  if (missingParams.length > 0) {
+    const missingNames = missingParams.map((p) => `"${p.name}"`).join(", ");
+    throw new Error(
+      `Path parameter${missingParams.length > 1 ? "s" : ""} ${missingNames} in "${props.path}" ${missingParams.length > 1 ? "are" : "is"} not defined in the input schema`
+    );
+  }
 
-  const openAPIParameters: (oas31.ParameterObject | oas31.ReferenceObject)[] = [
-    // query parameters
-    ...(!httpMethodSupportsRequestBody[props.method]
-      ? Object.keys(props.input.shape)
-          // exclude query parameters that are already path parameters
-          .filter((key) => {
-            return !getKeysFromPathPattern(props.path).some(
-              (k) => String(k.name) === key
-            );
-          })
-          .map((key) => {
-            const fieldSchema = props.input.shape[key];
-            const { schema } = createSchema(fieldSchema);
-
-            // Determine if parameter is required by checking if it's optional
-            const isOptional = fieldSchema.isOptional?.() ?? false;
-
-            return {
-              name: key,
-              in: "query" as oas31.ParameterLocation,
-              required: !isOptional,
-              schema: schema,
-            };
-          })
-      : []),
-    // add path parameters
-    ...getKeysFromPathPattern(props.path).map((key) => {
-      const fieldSchema = props.input.shape[key.name];
-      const { schema } = createSchema(fieldSchema);
-
-      return {
-        name: String(key.name),
-        in: "path" as oas31.ParameterLocation,
-        required: true, // Path params are always required
-        schema: schema,
-      };
-    }),
-  ];
-
-  const openAPIRequestBody:
-    | oas31.ReferenceObject
-    | oas31.RequestBodyObject
-    | undefined = httpMethodSupportsRequestBody[props.method]
-    ? {
-        content: {
-          "application/json": {
-            schema: createSchema(props.input).schema,
-          },
-        },
-      }
-    : undefined;
-
-  const openAPIOperation: oas31.OperationObject = {
+  const openAPIPathsObject = buildOpenAPIPathsObject({
+    input: props.input,
+    output: props.output,
+    method: props.method,
+    path: props.path,
     description: props.description,
-    parameters: openAPIParameters,
-    requestBody: openAPIRequestBody,
-    responses: {
-      // success
-      200: {
-        description: "Success",
-        content: {
-          "application/json": {
-            schema: createSchema(props.output).schema,
-          },
-        },
-      },
-      // bad request
-      400: commonReponses[400].openAPISchema,
-      // unauthorized
-      401: props.authenticate ? commonReponses[401].openAPISchema : undefined,
-      // sarim: i don't think we need this
-      // 405: commonReponses[405].openAPISchema,
-    },
     tags: props.tags,
-  };
-
-  const openAPIPathItem: oas31.PathItemObject = {
-    [props.method.toLowerCase()]: openAPIOperation,
-  };
-
-  const openAPIPath: oas31.PathsObject = {
-    [toOpenAPIPath(props.path)]: openAPIPathItem,
-  };
+    requiresAuth: !!props.authenticate,
+  });
 
   const handler = async (request: Request) => {
     const logger = getLogger();
     const requestForRun = request.clone();
-    const requestForAuth = request.clone();
+    const loggingPrefix = getLoggingPrefix(request);
 
-    logger.log("debug", `${getLoggingPrefix(request)} begin`);
+    logger.log("debug", `${loggingPrefix} begin`);
 
     // ensure the method is correct
     if (request.method !== props.method) {
       logger.log(
         "warn",
-        `${getLoggingPrefix(request)} invalid HTTP method: received ${
+        `${loggingPrefix} invalid HTTP method: received ${
           request.method
         }, expected ${props.method}`,
         {
@@ -260,77 +301,27 @@ export const makeRequestHandler = <
       return commonReponses[405].response();
     }
 
-    let authenticationResult = false;
+    // Handle authentication if required
+    const authResult = await handleAuthentication(
+      props.authenticate,
+      request,
+      logger,
+      loggingPrefix
+    );
+    if (!authResult.success) return authResult.response;
 
-    try {
-      authenticationResult =
-        props.authenticate !== undefined &&
-        !(await props.authenticate(requestForAuth));
-    } catch (error) {
-      logger.log(
-        "error",
-        `${getLoggingPrefix(request)} error during authentication check`,
-        {
-          error: error instanceof Error ? error : new Error(String(error)),
-          url: request.url,
-        }
-      );
-    }
+    // Extract and validate input
+    const unsafeData = await extractRawInput(request, props.path, logger);
+    const validationResult = await validateInput(
+      props.input,
+      unsafeData,
+      logger,
+      loggingPrefix,
+      request.url
+    );
+    if (!validationResult.success) return validationResult.response;
 
-    // ensure authentication is correct
-    if (authenticationResult) {
-      logger.log(
-        "debug",
-        `${getLoggingPrefix(request)} authentication check returned false`,
-        {
-          url: request.url,
-        }
-      );
-      return commonReponses[401].response();
-    }
-
-    // parse the input
-    const unsafeData = {
-      // parse input from path parameters
-      ...getParamsFromPath(props.path, new URL(request.url).pathname),
-      // parse input from query parameters or body
-      ...(httpMethodSupportsRequestBody[request.method as HTTPMethod]
-        ? // if the method supports a body, parse it
-          await request.json().catch((error) => {
-            logger.log(
-              "warn",
-              `${getLoggingPrefix(request)} error parsing request body`,
-              {
-                error:
-                  error instanceof Error ? error : new Error(String(error)),
-                url: request.url,
-              }
-            );
-            // Just return an empty object if the body is not valid JSON
-            return {};
-          })
-        : // otherwise, parse the query parameters
-          Object.fromEntries(new URL(request.url).searchParams.entries())),
-    };
-
-    // parse the input with zod schema
-    const parsedData = await props.input.safeParseAsync(unsafeData);
-
-    // if the input is invalid, return a 400
-    if (!parsedData.success) {
-      logger.log(
-        "warn",
-        `${getLoggingPrefix(request)} request validation failed`,
-        {
-          validationError: parsedData.error,
-          receivedInput: unsafeData,
-          url: request.url,
-        }
-      );
-      return commonReponses[400].response(parsedData.error);
-    }
-
-    const input = parsedData.data;
+    const input = validationResult.data;
 
     // utility function to send output response
     const sendOutput = async (
@@ -339,7 +330,7 @@ export const makeRequestHandler = <
     ) => {
       logger.log(
         "debug",
-        `${getLoggingPrefix(request)} success ${options?.status ?? 200}`
+        `${loggingPrefix} success ${options?.status ?? 200}`
       );
       return new Response(
         JSON.stringify(output),
@@ -360,7 +351,7 @@ export const makeRequestHandler = <
       message,
       data,
     }: { status: number } & ErrorResponse) => {
-      logger.log("debug", `${getLoggingPrefix(request)} error ${status}`);
+      logger.log("debug", `${loggingPrefix} error ${status}`);
       return new Response(JSON.stringify({ message, data }), {
         status,
         headers: {
@@ -371,23 +362,16 @@ export const makeRequestHandler = <
 
     // run the user's code
     try {
-      const response = await props.run({
+      return await props.run({
         request: requestForRun,
         input,
         sendOutput,
         sendError,
       });
-
-      logger.log(
-        "debug",
-        `${getLoggingPrefix(request)} success ${response.status}`
-      );
-
-      return response;
     } catch (error) {
       logger.log(
         "error",
-        `${getLoggingPrefix(request)} unhandled error when handling request`,
+        `${loggingPrefix} unhandled error when handling request`,
         {
           error: error instanceof Error ? error : new Error(String(error)),
           input,
@@ -405,7 +389,7 @@ export const makeRequestHandler = <
       method: props.method,
       path: props.path,
     },
-    openAPIPathsObject: openAPIPath,
+    openAPIPathsObject,
     handler,
   };
 };
