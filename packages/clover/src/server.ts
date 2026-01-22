@@ -179,17 +179,31 @@ export const makeRequestHandler = <
           })
       : []),
     // add path parameters
-    ...getKeysFromPathPattern(props.path).map((key) => {
-      const fieldSchema = props.input.shape[key.name];
-      const { schema } = createSchema(fieldSchema);
+    ...(() => {
+      const pathKeys = getKeysFromPathPattern(props.path);
+      const missingParams = pathKeys.filter(
+        (key) => !(key.name in props.input.shape)
+      );
 
-      return {
-        name: String(key.name),
-        in: "path" as oas31.ParameterLocation,
-        required: true, // Path params are always required
-        schema: schema,
-      };
-    }),
+      if (missingParams.length > 0) {
+        const missingNames = missingParams.map((p) => `"${p.name}"`).join(", ");
+        throw new Error(
+          `Path parameter${missingParams.length > 1 ? "s" : ""} ${missingNames} in "${props.path}" ${missingParams.length > 1 ? "are" : "is"} not defined in the input schema`
+        );
+      }
+
+      return pathKeys.map((key) => {
+        const fieldSchema = props.input.shape[key.name];
+        const { schema } = createSchema(fieldSchema);
+
+        return {
+          name: String(key.name),
+          in: "path" as oas31.ParameterLocation,
+          required: true, // Path params are always required
+          schema: schema,
+        };
+      });
+    })(),
   ];
 
   const openAPIRequestBody:

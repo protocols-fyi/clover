@@ -59,6 +59,34 @@ describe("makeRequestHandler", () => {
     expect(data).toEqual({ greeting: "Hello, test!" });
   });
 
+  it("should throw when path param is not defined in input schema", () => {
+    expect(() =>
+      makeRequestHandler({
+        input: z.object({}), // id is not defined in the schema
+        output: z.object({ post: z.string() }),
+        method: "GET",
+        path: "/api/posts/:id",
+        run: async ({ sendOutput }) => {
+          return sendOutput({ post: "test" });
+        },
+      })
+    ).toThrow('Path parameter "id" in "/api/posts/:id" is not defined in the input schema');
+  });
+
+  it("should throw when multiple path params are not defined in input schema", () => {
+    expect(() =>
+      makeRequestHandler({
+        input: z.object({}), // userId and postId are not defined in the schema
+        output: z.object({ post: z.string() }),
+        method: "GET",
+        path: "/api/users/:userId/posts/:postId",
+        run: async ({ sendOutput }) => {
+          return sendOutput({ post: "test" });
+        },
+      })
+    ).toThrow('Path parameters "userId", "postId" in "/api/users/:userId/posts/:postId" are not defined in the input schema');
+  });
+
   it("should put query params in the input", async () => {
     const { handler } = makeRequestHandler({
       input: z.object({ name: z.string() }),
