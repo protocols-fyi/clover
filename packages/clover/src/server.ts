@@ -17,6 +17,13 @@ function getLoggingPrefix(request: Request): string {
 }
 
 /**
+ * Result of extracting raw input from request
+ */
+type ExtractRawInputResult =
+  | { success: true; data: Record<string, unknown> }
+  | { success: false; error: "invalid_json" };
+
+/**
  * Extract raw input data from request (path params, query params, or body)
  * before Zod validation
  */
@@ -24,7 +31,7 @@ async function extractRawInput(
   request: Request,
   path: string,
   logger: ILogger
-): Promise<Record<string, unknown>> {
+): Promise<ExtractRawInputResult> {
   const url = new URL(request.url);
   const logPrefix = getLoggingPrefix(request);
 
@@ -35,23 +42,34 @@ async function extractRawInput(
   let bodyOrQueryParams: Record<string, unknown> = {};
 
   if (httpMethodSupportsRequestBody[request.method as HTTPMethod]) {
-    try {
-      bodyOrQueryParams = await request.json();
-    } catch (error) {
-      logger.log("warn", `${logPrefix} error parsing request body`, {
-        error: error instanceof Error ? error : new Error(String(error)),
-        url: request.url,
-      });
-      // Return empty object if body is not valid JSON
+    // Read body as text first to check if it's empty
+    const bodyText = await request.text();
+
+    if (bodyText.trim() === "") {
+      // Empty body is allowed - treat as empty object
       bodyOrQueryParams = {};
+    } else {
+      // Try to parse as JSON
+      try {
+        bodyOrQueryParams = JSON.parse(bodyText);
+      } catch (error) {
+        logger.log("warn", `${logPrefix} error parsing request body`, {
+          error: error instanceof Error ? error : new Error(String(error)),
+          url: request.url,
+        });
+        return { success: false, error: "invalid_json" };
+      }
     }
   } else {
     bodyOrQueryParams = Object.fromEntries(url.searchParams.entries());
   }
 
   return {
-    ...pathParams,
-    ...bodyOrQueryParams,
+    success: true,
+    data: {
+      ...pathParams,
+      ...bodyOrQueryParams,
+    },
   };
 }
 
@@ -336,10 +354,14 @@ export const makeRequestHandler = <
     }
 
     // Extract and validate input
-    const unsafeData = await extractRawInput(request, props.path, logger);
+    const extractResult = await extractRawInput(request, props.path, logger);
+    if (!extractResult.success) {
+      return commonReponses[400].response({ message: "Invalid JSON body" });
+    }
+
     const validationResult = await validateInput(
       props.input,
-      unsafeData,
+      extractResult.data,
       logger,
       loggingPrefix,
       request.url
