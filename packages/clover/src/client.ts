@@ -50,7 +50,7 @@ export const makeFetcher = (outerProps: IMakeFetcherProps) => {
       httpMethodSupportsRequestBody[props.method]
         ? url
         : new URL(
-            url.toString() + "?" + new URLSearchParams(props.input as any)
+            `${url.toString()}?${new URLSearchParams(props.input as any)}`
           ),
       {
         method: props.method,

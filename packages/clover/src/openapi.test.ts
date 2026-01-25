@@ -733,7 +733,7 @@ describe("buildOpenAPIPathsObject", () => {
     });
 
     it("should handle very long path", () => {
-      const longPath = "/api" + "/segment".repeat(20) + "/:id";
+      const longPath = `/api${"/segment".repeat(20)}/:id`;
       const result = buildOpenAPIPathsObject({
         input: z.object({ id: z.string() }),
         output: z.object({ found: z.boolean() }),
@@ -742,7 +742,7 @@ describe("buildOpenAPIPathsObject", () => {
         requiresAuth: false,
       });
 
-      const expectedPath = "/api" + "/segment".repeat(20) + "/{id}";
+      const expectedPath = `/api${"/segment".repeat(20)}/{id}`;
       expect(Object.keys(result)).toEqual([expectedPath]);
     });
   });

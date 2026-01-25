@@ -662,7 +662,7 @@ describe("makeRequestHandler", () => {
       run: async ({ input, authContext, sendOutput }) => {
         return sendOutput({
           greeting: `Hello, ${input.name}!`,
-          userId: authContext!.userId,
+          userId: authContext?.userId,
         });
       },
     });
