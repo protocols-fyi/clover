@@ -22,23 +22,111 @@ const { handler, clientConfig, openAPIPathsObject } = makeRequestHandler({
   path: "/api/hello",
   method: "GET",
   description: "Greets the user",
-  authenticate: async (req) => {
-    return true;
-  },
 });
 ```
 
 ## Props
 
-| Name            | Type                                                    | Description                                                                                                                                                                                                                                     |
-| :-------------- | :------------------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `input`         | `z.ZodObject<any, any>`                                 | A Zod schema describing the shape of your input. Clover will look for the input inside query params, path params or JSON formatted request body.                                                                                                |
-| `output`        | `z.ZodObject<any, any>`                                 | A Zod schema describing the shape of your output. You can use the `sendOutput` helper inside your `run` function to ensure that you conform to the output.                                                                                      |
-| `run`           | `({ request, input, sendOutput }) => Promise<Response>` | The logic you want to run. You can use the validated input, or use the raw request. You can also send the response any way you like, but the `sendOutput` helper will help you conform to the output schema.                                    |
-| `path`          | `string`                                                | The relative path where your handler can be reached e.g. `/api/hello-world`                                                                                                                                                                     |
-| `method`        | `HTTPMethod`                                            | `GET`, `POST`, `PUT`, `PATCH` or `DELETE`. This helps Clover generate appropriate documentation, and also helps it figure out where to look for the input. For example, input will be parsed from query and path parameters for `GET` requests. |
-| `description?`  | `string`                                                | Useful for generating OpenAPI documentation for this route.                                                                                                                                                                                     |
-| `authenticate?` | `(request: Request) => Promise<boolean>`                | If you supply this property, it will mark the route as protected with Bearer auth in the documentation. You can verify authentication status any way you like. Return `true` if the request is authenticated.                                   |
+| Name            | Type                                                                                                                                        | Description                                                                                                                                                                                                                                     |
+| :-------------- | :------------------------------------------------------------------------------------------------------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `input`         | `z.ZodObject<any, any>`                                                                                                                     | A Zod schema describing the shape of your input. Clover will look for the input inside query params, path params or JSON formatted request body.                                                                                                |
+| `output`        | `z.ZodObject<any, any>`                                                                                                                     | A Zod schema describing the shape of your output. You can use the `sendOutput` helper inside your `run` function to ensure that you conform to the output.                                                                                      |
+| `run`           | `({ request, input, authContext, sendOutput, sendError }) => Promise<Response>`                                                             | The logic you want to run. You can use the validated input, or use the raw request. The `authContext` contains any context returned from your `authenticate` function. Use `sendOutput` or `sendError` helpers to send responses.               |
+| `path`          | `string`                                                                                                                                    | The relative path where your handler can be reached e.g. `/api/hello-world`                                                                                                                                                                     |
+| `method`        | `HTTPMethod`                                                                                                                                | `GET`, `POST`, `PUT`, `PATCH` or `DELETE`. This helps Clover generate appropriate documentation, and also helps it figure out where to look for the input. For example, input will be parsed from query and path parameters for `GET` requests. |
+| `description?`  | `string`                                                                                                                                    | Useful for generating OpenAPI documentation for this route.                                                                                                                                                                                     |
+| `authenticate?` | `(request: Request) => Promise<{ authenticated: true; context: TAuthContext } \| { authenticated: false; reason: string }>`                | If supplied, marks the route as protected with Bearer auth in the documentation. Return `authenticated: true` with a `context` object to pass data to your handler, or `authenticated: false` with a `reason` for rejection (logged only, not sent to client). |
+
+## Authentication
+
+Clover supports route-level authentication with typed context. When you provide an `authenticate` function, it will be called before your `run` handler. If authentication fails, a 401 response is returned automatically.
+
+### Basic Example
+
+```ts
+const { handler } = makeRequestHandler({
+  input: z.object({ name: z.string() }),
+  output: z.object({ greeting: z.string(), userId: z.string() }),
+  method: "GET",
+  path: "/api/hello",
+  authenticate: async (request) => {
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+
+    if (!token) {
+      return { authenticated: false, reason: "No token provided" };
+    }
+
+    const user = await verifyToken(token);
+    if (!user) {
+      return { authenticated: false, reason: "Invalid token" };
+    }
+
+    // Return context that will be available in your run handler
+    return { authenticated: true, context: { userId: user.id, role: user.role } };
+  },
+  run: async ({ input, authContext, sendOutput }) => {
+    // authContext is typed based on what you return from authenticate
+    return sendOutput({
+      greeting: `Hello, ${input.name}!`,
+      userId: authContext.userId,
+    });
+  },
+});
+```
+
+### Authentication Result
+
+The `authenticate` function must return one of two results:
+
+**Success:**
+```ts
+{ authenticated: true, context: TAuthContext }
+```
+The `context` can be any object containing user info, permissions, session data, etc. It will be passed to your `run` handler as `authContext`.
+
+**Failure:**
+```ts
+{ authenticated: false, reason: string }
+```
+The `reason` is logged server-side for debugging but is **not** exposed to the client. The client receives a generic 401 Unauthorized response.
+
+### Type Safety
+
+The `authContext` in your `run` handler is automatically typed based on what your `authenticate` function returns:
+
+```ts
+type UserContext = { userId: string; permissions: string[] };
+
+const { handler } = makeRequestHandler({
+  input: z.object({ resourceId: z.string() }),
+  output: z.object({ allowed: z.boolean() }),
+  method: "GET",
+  path: "/api/check-access/:resourceId",
+  authenticate: async (request): Promise<
+    | { authenticated: true; context: UserContext }
+    | { authenticated: false; reason: string }
+  > => {
+    // ... authentication logic
+    return {
+      authenticated: true,
+      context: { userId: "user-123", permissions: ["read", "write"] }
+    };
+  },
+  run: async ({ input, authContext, sendOutput }) => {
+    // TypeScript knows authContext is UserContext
+    const canAccess = authContext.permissions.includes("read");
+    return sendOutput({ allowed: canAccess });
+  },
+});
+```
+
+### Error Handling
+
+If your `authenticate` function throws an error, Clover will:
+1. Log the error at the `error` level
+2. Return a 401 response (fail closed for security)
+
+This ensures that authentication errors don't accidentally grant access.
 
 ## Return values
 
