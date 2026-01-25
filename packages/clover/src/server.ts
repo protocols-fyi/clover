@@ -17,6 +17,13 @@ function getLoggingPrefix(request: Request): string {
 }
 
 /**
+ * Result of extracting raw input from request
+ */
+type ExtractRawInputResult =
+  | { success: true; data: Record<string, unknown> }
+  | { success: false; error: "invalid_json" };
+
+/**
  * Extract raw input data from request (path params, query params, or body)
  * before Zod validation
  */
@@ -24,7 +31,7 @@ async function extractRawInput(
   request: Request,
   path: string,
   logger: ILogger
-): Promise<Record<string, unknown>> {
+): Promise<ExtractRawInputResult> {
   const url = new URL(request.url);
   const logPrefix = getLoggingPrefix(request);
 
@@ -35,62 +42,82 @@ async function extractRawInput(
   let bodyOrQueryParams: Record<string, unknown> = {};
 
   if (httpMethodSupportsRequestBody[request.method as HTTPMethod]) {
-    try {
-      bodyOrQueryParams = await request.json();
-    } catch (error) {
-      logger.log("warn", `${logPrefix} error parsing request body`, {
-        error: error instanceof Error ? error : new Error(String(error)),
-        url: request.url,
-      });
-      // Return empty object if body is not valid JSON
+    // Read body as text first to check if it's empty
+    const bodyText = await request.text();
+
+    if (bodyText.trim() === "") {
+      // Empty body is allowed - treat as empty object
       bodyOrQueryParams = {};
+    } else {
+      // Try to parse as JSON
+      try {
+        bodyOrQueryParams = JSON.parse(bodyText);
+      } catch (error) {
+        logger.log("warn", `${logPrefix} error parsing request body`, {
+          error: error instanceof Error ? error : new Error(String(error)),
+          url: request.url,
+        });
+        return { success: false, error: "invalid_json" };
+      }
     }
   } else {
     bodyOrQueryParams = Object.fromEntries(url.searchParams.entries());
   }
 
   return {
-    ...pathParams,
-    ...bodyOrQueryParams,
+    success: true,
+    data: {
+      ...pathParams,
+      ...bodyOrQueryParams,
+    },
   };
 }
 
 /**
- * Handle authentication if required
- * @returns Discriminated union - must check `success` before proceeding
+ * Authentication result type from user-provided authenticate function
  */
-async function handleAuthentication(
-  authenticate: ((request: Request) => Promise<boolean>) | undefined,
+type AuthenticateResult<TAuthContext> =
+  | { authenticated: true; context: TAuthContext }
+  | { authenticated: false; reason: string };
+
+/**
+ * Handle authentication if required
+ * @returns The auth result (authenticated: true with context undefined if no auth function)
+ */
+async function handleAuthentication<TAuthContext>(
+  authenticate:
+    | ((request: Request) => Promise<AuthenticateResult<TAuthContext>>)
+    | undefined,
   request: Request,
   logger: ILogger,
   loggingPrefix: string
-): Promise<{ success: true } | { success: false; response: Response }> {
+): Promise<AuthenticateResult<TAuthContext>> {
   if (!authenticate) {
-    return { success: true };
+    // as cast since we know that if the authenticat is not provided, the context will be undefined
+    return { authenticated: true, context: undefined as TAuthContext };
   }
 
   const requestForAuth = request.clone();
-  let isAuthenticated = false;
 
   try {
-    isAuthenticated = await authenticate(requestForAuth);
+    const result = await authenticate(requestForAuth);
+
+    if (!result.authenticated) {
+      logger.log("debug", `${loggingPrefix} authentication failed: ${result.reason}`, {
+        url: request.url,
+        reason: result.reason,
+      });
+    }
+
+    return result;
   } catch (error) {
     logger.log("error", `${loggingPrefix} error during authentication check`, {
       error: error instanceof Error ? error : new Error(String(error)),
       url: request.url,
     });
     // Fail closed: auth errors should reject the request
-    return { success: false, response: commonReponses[401].response() };
+    return { authenticated: false, reason: "Authentication error" };
   }
-
-  if (!isAuthenticated) {
-    logger.log("debug", `${loggingPrefix} authentication check returned false`, {
-      url: request.url,
-    });
-    return { success: false, response: commonReponses[401].response() };
-  }
-
-  return { success: true };
 }
 
 /**
@@ -124,7 +151,8 @@ export interface IMakeRequestHandlerProps<
   TInput extends z.ZodObject<any, any>,
   TOutput extends z.ZodObject<any, any>,
   TMethod extends HTTPMethod,
-  TPath extends string
+  TPath extends string,
+  TAuthContext = void
 > {
   /**
    * describe the shape of the input
@@ -155,7 +183,13 @@ export interface IMakeRequestHandlerProps<
    * @param request - the request, do whatever you want with it
    * @returns - if false, the request will be rejected
    */
-  authenticate?: (request: Request) => Promise<boolean>;
+  authenticate?: (request: Request) => Promise<{
+    authenticated: true;
+    context: TAuthContext;
+  } | {
+    authenticated: false;
+    reason: string;
+  }>;
   /**
    * a callback inside which you can run your logic
    * @returns a response to send back to the client
@@ -163,7 +197,9 @@ export interface IMakeRequestHandlerProps<
   run: ({
     request,
     input,
+    authContext,
     sendOutput,
+    sendError,
   }: {
     /**
      * the raw request, do whatever you want with it
@@ -173,6 +209,10 @@ export interface IMakeRequestHandlerProps<
      * a helper with the input data
      */
     input: z.infer<TInput>;
+    /**
+     * the context returned from the authenticate function (void if no auth configured)
+     */
+    authContext: TAuthContext;
     /**
      * @param output - the output data
      * @param options Request options
@@ -252,9 +292,10 @@ export const makeRequestHandler = <
   TInput extends z.ZodObject<any, any>,
   TOutput extends z.ZodObject<any, any>,
   TMethod extends HTTPMethod,
-  TPath extends string
+  TPath extends string,
+  TAuthContext = void
 >(
-  props: IMakeRequestHandlerProps<TInput, TOutput, TMethod, TPath>
+  props: IMakeRequestHandlerProps<TInput, TOutput, TMethod, TPath, TAuthContext>
 ): IMakeRequestHandlerReturn<TInput, TOutput, TMethod, TPath> => {
   // Validate that all path parameters are defined in the input schema
   const pathKeys = getKeysFromPathPattern(props.path);
@@ -308,13 +349,19 @@ export const makeRequestHandler = <
       logger,
       loggingPrefix
     );
-    if (!authResult.success) return authResult.response;
+    if (!authResult.authenticated) {
+      return commonReponses[401].response();
+    }
 
     // Extract and validate input
-    const unsafeData = await extractRawInput(request, props.path, logger);
+    const extractResult = await extractRawInput(request, props.path, logger);
+    if (!extractResult.success) {
+      return commonReponses[400].response({ message: "Invalid JSON body" });
+    }
+
     const validationResult = await validateInput(
       props.input,
-      unsafeData,
+      extractResult.data,
       logger,
       loggingPrefix,
       request.url
@@ -365,6 +412,7 @@ export const makeRequestHandler = <
       return await props.run({
         request: requestForRun,
         input,
+        authContext: authResult.context,
         sendOutput,
         sendError,
       });

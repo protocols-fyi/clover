@@ -246,7 +246,172 @@ describe("makeRequestHandler", () => {
     expect(response.status).toBe(400);
   });
 
-  it("should allow for non-json request bodies if the input schema is an empty object", async () => {
+  describe("invalid JSON body handling", () => {
+    /**
+     * When JSON parsing fails, the handler returns 400 with "Invalid JSON body" error.
+     * This happens before Zod validation, so the error is explicit about the JSON issue.
+     */
+
+    it("returns 400 with Invalid JSON body error when JSON parsing fails", async () => {
+      const { handler } = makeRequestHandler({
+        input: z.object({ name: z.string() }), // name is required
+        output: z.object({ greeting: z.string() }),
+        method: "POST",
+        path: "/api/hello",
+        run: async ({ input, sendOutput }) => {
+          return sendOutput({ greeting: `Hello, ${input.name}!` });
+        },
+      });
+
+      const response = await handler(
+        new Request("http://test.com/api/hello", {
+          method: "POST",
+          body: "this is not valid JSON",
+        })
+      );
+
+      expect(response.status).toBe(400);
+
+      const body = await response.json();
+      expect(body.error).toBe("Bad request");
+      expect(body.details.message).toBe("Invalid JSON body");
+    });
+
+    it("returns 400 when invalid JSON is provided even if all fields are optional", async () => {
+      const { handler } = makeRequestHandler({
+        input: z.object({
+          name: z.string().optional(),
+          count: z.number().default(0),
+        }),
+        output: z.object({
+          receivedName: z.string().nullable(),
+          receivedCount: z.number(),
+        }),
+        method: "POST",
+        path: "/api/data",
+        run: async ({ input, sendOutput }) => {
+          return sendOutput({
+            receivedName: input.name ?? null,
+            receivedCount: input.count,
+          });
+        },
+      });
+
+      const response = await handler(
+        new Request("http://test.com/api/data", {
+          method: "POST",
+          body: "completely invalid JSON {{{",
+        })
+      );
+
+      // Invalid JSON should always return 400, regardless of schema
+      expect(response.status).toBe(400);
+
+      const body = await response.json();
+      expect(body.error).toBe("Bad request");
+      expect(body.details.message).toBe("Invalid JSON body");
+    });
+
+    it("logs a warning when JSON parsing fails", async () => {
+      const logs: { level: string; message: string }[] = [];
+      setLogger({
+        log: (level, message) => {
+          logs.push({ level, message });
+        },
+      });
+
+      const { handler } = makeRequestHandler({
+        input: z.object({}),
+        output: z.object({ ok: z.boolean() }),
+        method: "POST",
+        path: "/api/test",
+        run: async ({ sendOutput }) => {
+          return sendOutput({ ok: true });
+        },
+      });
+
+      await handler(
+        new Request("http://test.com/api/test", {
+          method: "POST",
+          body: "invalid json",
+        })
+      );
+
+      // A warning IS logged about the parse failure
+      const parseWarning = logs.find(l =>
+        l.level === "warn" && l.message.includes("error parsing request body")
+      );
+      expect(parseWarning).toBeDefined();
+    });
+
+    it("accepts empty JSON body {} when all fields are optional", async () => {
+      const { handler } = makeRequestHandler({
+        input: z.object({
+          name: z.string().optional(),
+          count: z.number().default(0),
+        }),
+        output: z.object({
+          receivedName: z.string().nullable(),
+          receivedCount: z.number(),
+        }),
+        method: "POST",
+        path: "/api/data",
+        run: async ({ input, sendOutput }) => {
+          return sendOutput({
+            receivedName: input.name ?? null,
+            receivedCount: input.count,
+          });
+        },
+      });
+
+      const response = await handler(
+        new Request("http://test.com/api/data", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}), // Valid empty JSON object
+        })
+      );
+
+      // Empty {} is valid when all fields are optional/have defaults
+      expect(response.status).toBe(200);
+
+      const body = await response.json();
+      expect(body.receivedName).toBeNull();
+      expect(body.receivedCount).toBe(0);
+    });
+
+    it("returns 400 when completely invalid JSON is provided and schema has required fields", async () => {
+      const { handler } = makeRequestHandler({
+        input: z.object({
+          name: z.string(),
+          age: z.number(),
+        }),
+        output: z.object({ success: z.boolean() }),
+        method: "POST",
+        path: "/api/user",
+        run: async ({ sendOutput }) => {
+          return sendOutput({ success: true });
+        },
+      });
+
+      const response = await handler(
+        new Request("http://test.com/api/user", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "completely invalid JSON {{{",
+        })
+      );
+
+      expect(response.status).toBe(400);
+
+      const body = await response.json();
+      expect(body.error).toBe("Bad request");
+      // The error is explicitly about invalid JSON, not about missing fields
+      expect(body.details.message).toBe("Invalid JSON body");
+    });
+  });
+
+  it("should return 400 for non-json request bodies even if the input schema is empty", async () => {
     const { handler } = makeRequestHandler({
       input: z.object({}),
       output: z.object({ input: z.any() }),
@@ -261,6 +426,28 @@ describe("makeRequestHandler", () => {
       new Request("http://test.com/api/hello", {
         method: "POST",
         body: "not-json",
+      })
+    );
+
+    // Invalid JSON always returns 400
+    expect(response.status).toBe(400);
+  });
+
+  it("should allow POST with no body when input schema is empty", async () => {
+    const { handler } = makeRequestHandler({
+      input: z.object({}),
+      output: z.object({ success: z.boolean() }),
+      method: "POST",
+      path: "/api/action",
+      run: async ({ sendOutput }) => {
+        return sendOutput({ success: true });
+      },
+    });
+
+    const response = await handler(
+      new Request("http://test.com/api/action", {
+        method: "POST",
+        // No body at all
       })
     );
 
@@ -384,7 +571,7 @@ describe("makeRequestHandler", () => {
         return sendOutput({ greeting: `Hello, ${input.name}!` });
       },
       // Deny the user for this test
-      authenticate: async () => false,
+      authenticate: async () => ({ authenticated: false, reason: "Denied" }),
     });
 
     const response = await handler(
@@ -425,7 +612,7 @@ describe("makeRequestHandler", () => {
       method: "GET",
       path: "/api/hello",
       run: runMock,
-      authenticate: async () => false,
+      authenticate: async () => ({ authenticated: false, reason: "Denied" }),
     });
 
     await handler(new Request("http://test.com/api/hello?name=test"));
@@ -434,7 +621,7 @@ describe("makeRequestHandler", () => {
   });
 
   it("should call authenticate when provided", async () => {
-    const authMock = vi.fn().mockResolvedValue(true);
+    const authMock = vi.fn().mockResolvedValue({ authenticated: true, context: {} });
 
     const { handler } = makeRequestHandler({
       input: z.object({ name: z.string() }),
@@ -450,6 +637,89 @@ describe("makeRequestHandler", () => {
     await handler(new Request("http://test.com/api/hello?name=test"));
 
     expect(authMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("should pass auth context to run callback when authenticated", async () => {
+    const userContext = { userId: "user-123", role: "admin" };
+
+    const { handler } = makeRequestHandler({
+      input: z.object({ name: z.string() }),
+      output: z.object({ greeting: z.string(), userId: z.string() }),
+      method: "GET",
+      path: "/api/hello",
+      authenticate: async () => ({ authenticated: true, context: userContext }),
+      run: async ({ input, authContext, sendOutput }) => {
+        return sendOutput({
+          greeting: `Hello, ${input.name}!`,
+          userId: authContext!.userId,
+        });
+      },
+    });
+
+    const response = await handler(
+      new Request("http://test.com/api/hello?name=test")
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ greeting: "Hello, test!", userId: "user-123" });
+  });
+
+  it("should pass undefined authContext when no authenticate function is provided", async () => {
+    let receivedAuthContext: unknown = "not-set";
+
+    const { handler } = makeRequestHandler({
+      input: z.object({ name: z.string() }),
+      output: z.object({ greeting: z.string() }),
+      method: "GET",
+      path: "/api/hello",
+      run: async ({ input, authContext, sendOutput }) => {
+        receivedAuthContext = authContext;
+        return sendOutput({ greeting: `Hello, ${input.name}!` });
+      },
+    });
+
+    await handler(new Request("http://test.com/api/hello?name=test"));
+
+    expect(receivedAuthContext).toBeUndefined();
+  });
+
+  it("should correctly type authContext based on authenticate return type", async () => {
+    type UserContext = { userId: string; permissions: string[] };
+
+    const { handler } = makeRequestHandler<
+      z.ZodObject<{ name: z.ZodString }>,
+      z.ZodObject<{ greeting: z.ZodString; permissions: z.ZodArray<z.ZodString> }>,
+      "GET",
+      "/api/hello",
+      UserContext
+    >({
+      input: z.object({ name: z.string() }),
+      output: z.object({ greeting: z.string(), permissions: z.array(z.string()) }),
+      method: "GET",
+      path: "/api/hello",
+      authenticate: async () => ({
+        authenticated: true,
+        context: { userId: "user-123", permissions: ["read", "write"] },
+      }),
+      run: async ({ input, authContext, sendOutput }) => {
+        return sendOutput({
+          greeting: `Hello, ${input.name}!`,
+          permissions: authContext.permissions,
+        });
+      },
+    });
+
+    const response = await handler(
+      new Request("http://test.com/api/hello?name=test")
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({
+      greeting: "Hello, test!",
+      permissions: ["read", "write"],
+    });
   });
 
   it("should allow an explicit error response", async () => {
@@ -674,7 +944,7 @@ describe("makeRequestHandler", () => {
         output: z.object({ greeting: z.string() }),
         method: "GET",
         path: "/api/hello",
-        authenticate: async () => false,
+        authenticate: async () => ({ authenticated: false, reason: "Invalid token" }),
         run: async ({ sendOutput }) => {
           return sendOutput({ greeting: "Hello, test!" });
         },
@@ -684,9 +954,10 @@ describe("makeRequestHandler", () => {
 
       expect(logs?.[1]).toEqual({
         level: "debug",
-        message: "Handler GET /api/hello authentication check returned false",
+        message: "Handler GET /api/hello authentication failed: Invalid token",
         meta: {
           url: "http://test.com/api/hello?name=test",
+          reason: "Invalid token",
         },
       });
     });
