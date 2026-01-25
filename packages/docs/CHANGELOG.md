@@ -1,4 +1,4 @@
-# @sarim.garden/clover-docs
+# @protocols-fyi/clover-docs
 
 ## 2.0.6
 
