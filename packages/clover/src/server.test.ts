@@ -1,18 +1,22 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { oas31 } from "openapi3-ts";
-import { errorResponseSchema, makeRequestHandler } from "./server";
-import { z, ZodError } from "zod";
+import type { oas31 } from "openapi3-ts";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ZodError, z } from "zod";
 import { setLogger } from "./logger";
+import { errorResponseSchema, makeRequestHandler } from "./server";
 
 function getParam(
   parameters: (oas31.ParameterObject | oas31.ReferenceObject)[] | undefined,
   name: string
-): (Omit<oas31.ParameterObject, "schema"> & { schema?: oas31.SchemaObject }) | undefined {
+):
+  | (Omit<oas31.ParameterObject, "schema"> & { schema?: oas31.SchemaObject })
+  | undefined {
   const param = parameters?.find(
     (p): p is oas31.ParameterObject => "name" in p && p.name === name
   );
   if (!param) return undefined;
-  return param as Omit<oas31.ParameterObject, "schema"> & { schema?: oas31.SchemaObject };
+  return param as Omit<oas31.ParameterObject, "schema"> & {
+    schema?: oas31.SchemaObject;
+  };
 }
 
 describe("makeRequestHandler", () => {
@@ -82,7 +86,9 @@ describe("makeRequestHandler", () => {
           return sendOutput({ post: "test" });
         },
       })
-    ).toThrow('Path parameter "id" in "/api/posts/:id" is not defined in the input schema');
+    ).toThrow(
+      'Path parameter "id" in "/api/posts/:id" is not defined in the input schema'
+    );
   });
 
   it("should throw when multiple path params are not defined in input schema", () => {
@@ -96,7 +102,9 @@ describe("makeRequestHandler", () => {
           return sendOutput({ post: "test" });
         },
       })
-    ).toThrow('Path parameters "userId", "postId" in "/api/users/:userId/posts/:postId" are not defined in the input schema');
+    ).toThrow(
+      'Path parameters "userId", "postId" in "/api/users/:userId/posts/:postId" are not defined in the input schema'
+    );
   });
 
   it("should put query params in the input", async () => {
@@ -338,8 +346,9 @@ describe("makeRequestHandler", () => {
       );
 
       // A warning IS logged about the parse failure
-      const parseWarning = logs.find(l =>
-        l.level === "warn" && l.message.includes("error parsing request body")
+      const parseWarning = logs.find(
+        (l) =>
+          l.level === "warn" && l.message.includes("error parsing request body")
       );
       expect(parseWarning).toBeDefined();
     });
@@ -621,7 +630,9 @@ describe("makeRequestHandler", () => {
   });
 
   it("should call authenticate when provided", async () => {
-    const authMock = vi.fn().mockResolvedValue({ authenticated: true, context: {} });
+    const authMock = vi
+      .fn()
+      .mockResolvedValue({ authenticated: true, context: {} });
 
     const { handler } = makeRequestHandler({
       input: z.object({ name: z.string() }),
@@ -689,13 +700,19 @@ describe("makeRequestHandler", () => {
 
     const { handler } = makeRequestHandler<
       z.ZodObject<{ name: z.ZodString }>,
-      z.ZodObject<{ greeting: z.ZodString; permissions: z.ZodArray<z.ZodString> }>,
+      z.ZodObject<{
+        greeting: z.ZodString;
+        permissions: z.ZodArray<z.ZodString>;
+      }>,
       "GET",
       "/api/hello",
       UserContext
     >({
       input: z.object({ name: z.string() }),
-      output: z.object({ greeting: z.string(), permissions: z.array(z.string()) }),
+      output: z.object({
+        greeting: z.string(),
+        permissions: z.array(z.string()),
+      }),
       method: "GET",
       path: "/api/hello",
       authenticate: async () => ({
@@ -944,7 +961,10 @@ describe("makeRequestHandler", () => {
         output: z.object({ greeting: z.string() }),
         method: "GET",
         path: "/api/hello",
-        authenticate: async () => ({ authenticated: false, reason: "Invalid token" }),
+        authenticate: async () => ({
+          authenticated: false,
+          reason: "Invalid token",
+        }),
         run: async ({ sendOutput }) => {
           return sendOutput({ greeting: "Hello, test!" });
         },
@@ -1101,8 +1121,7 @@ describe("makeRequestHandler", () => {
           },
         });
 
-        const requestBody =
-          openAPIPathsObject["/api/users"]?.post?.requestBody;
+        const requestBody = openAPIPathsObject["/api/users"]?.post?.requestBody;
         expect(requestBody).toBeDefined();
         const schema = (requestBody as any)?.content?.["application/json"]
           ?.schema;
@@ -1186,12 +1205,10 @@ describe("makeRequestHandler", () => {
       it("should include examples and descriptions for enums", () => {
         const { openAPIPathsObject } = makeRequestHandler({
           input: z.object({
-            status: z
-              .enum(["active", "inactive", "pending"])
-              .meta({
-                example: "active",
-                description: "User account status",
-              }),
+            status: z.enum(["active", "inactive", "pending"]).meta({
+              example: "active",
+              description: "User account status",
+            }),
             role: z
               .enum(["admin", "user", "guest"])
               .meta({ example: "user", description: "User role" }),
@@ -1939,9 +1956,10 @@ describe("makeRequestHandler", () => {
                 }),
               }),
               preferences: z.object({
-                theme: z
-                  .enum(["light", "dark", "auto"])
-                  .meta({ example: "dark", description: "UI theme preference" }),
+                theme: z.enum(["light", "dark", "auto"]).meta({
+                  example: "dark",
+                  description: "UI theme preference",
+                }),
                 notifications: z
                   .boolean()
                   .meta({ example: true, description: "Enable notifications" }),
@@ -1988,8 +2006,7 @@ describe("makeRequestHandler", () => {
           },
         });
 
-        const operation =
-          openAPIPathsObject["/api/users/{userId}"]?.patch;
+        const operation = openAPIPathsObject["/api/users/{userId}"]?.patch;
         expect(operation).toBeDefined();
 
         // Verify path parameter
@@ -2154,7 +2171,7 @@ describe("handler wrapper pattern", () => {
   // Minimal wrapper that injects a user object
   const withUser = <
     TInput extends z.ZodObject<any, any>,
-    TOutput extends z.ZodObject<any, any>
+    TOutput extends z.ZodObject<any, any>,
   >(props: {
     input: TInput;
     output: TOutput;

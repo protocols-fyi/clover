@@ -1,10 +1,10 @@
-import { oas31 } from "openapi3-ts";
-import { z } from "zod";
+import type { oas31 } from "openapi3-ts";
+import type { z } from "zod";
 import { createSchema } from "zod-openapi";
 import { commonReponses } from "./responses";
 import {
-  HTTPMethod,
   getKeysFromPathPattern,
+  type HTTPMethod,
   httpMethodSupportsRequestBody,
   toOpenAPIPath,
 } from "./utils";
@@ -63,7 +63,10 @@ export function buildOpenAPIPathsObject(
 
   const parameters = httpMethodSupportsRequestBody[method]
     ? buildPathParameters(input, pathKeys)
-    : [...buildQueryParameters(input, pathKeyNames), ...buildPathParameters(input, pathKeys)];
+    : [
+        ...buildQueryParameters(input, pathKeyNames),
+        ...buildPathParameters(input, pathKeys),
+      ];
 
   const requestBody: oas31.RequestBodyObject | undefined =
     httpMethodSupportsRequestBody[method]

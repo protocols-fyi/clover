@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from "vitest";
-import { setLogger, getLogger, formatLogPayload } from "./logger";
+import { describe, expect, it, vi } from "vitest";
 import type { ILogger } from "./logger";
+import { formatLogPayload, getLogger, setLogger } from "./logger";
 
 describe("Logger", () => {
   it("should allow setting and getting a custom logger", () => {

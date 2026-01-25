@@ -1,4 +1,4 @@
-import { oas31 } from "openapi3-ts";
+import type { oas31 } from "openapi3-ts";
 
 export const commonReponses = {
   405: {

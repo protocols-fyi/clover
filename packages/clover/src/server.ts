@@ -1,15 +1,15 @@
 import merge from "lodash.merge";
-import { oas31 } from "openapi3-ts";
+import type { oas31 } from "openapi3-ts";
 import { z } from "zod";
+import { getLogger, type ILogger } from "./logger";
+import { buildOpenAPIPathsObject } from "./openapi";
 import { commonReponses } from "./responses";
 import {
-  HTTPMethod,
   getKeysFromPathPattern,
   getParamsFromPath,
+  type HTTPMethod,
   httpMethodSupportsRequestBody,
 } from "./utils";
-import { getLogger, ILogger } from "./logger";
-import { buildOpenAPIPathsObject } from "./openapi";
 
 function getLoggingPrefix(request: Request): string {
   const url = new URL(request.url);
@@ -103,10 +103,14 @@ async function handleAuthentication<TAuthContext>(
     const result = await authenticate(requestForAuth);
 
     if (!result.authenticated) {
-      logger.log("debug", `${loggingPrefix} authentication failed: ${result.reason}`, {
-        url: request.url,
-        reason: result.reason,
-      });
+      logger.log(
+        "debug",
+        `${loggingPrefix} authentication failed: ${result.reason}`,
+        {
+          url: request.url,
+          reason: result.reason,
+        }
+      );
     }
 
     return result;
@@ -131,7 +135,8 @@ async function validateInput<TInput extends z.ZodObject<any, any>>(
   loggingPrefix: string,
   url: string
 ): Promise<
-  { success: true; data: z.infer<TInput> } | { success: false; response: Response }
+  | { success: true; data: z.infer<TInput> }
+  | { success: false; response: Response }
 > {
   const parsedData = await schema.safeParseAsync(unsafeData);
 
@@ -141,7 +146,10 @@ async function validateInput<TInput extends z.ZodObject<any, any>>(
       receivedInput: unsafeData,
       url,
     });
-    return { success: false, response: commonReponses[400].response(parsedData.error) };
+    return {
+      success: false,
+      response: commonReponses[400].response(parsedData.error),
+    };
   }
 
   return { success: true, data: parsedData.data };
@@ -152,7 +160,7 @@ export interface IMakeRequestHandlerProps<
   TOutput extends z.ZodObject<any, any>,
   TMethod extends HTTPMethod,
   TPath extends string,
-  TAuthContext = void
+  TAuthContext = void,
 > {
   /**
    * describe the shape of the input
@@ -183,13 +191,16 @@ export interface IMakeRequestHandlerProps<
    * @param request - the request, do whatever you want with it
    * @returns - if false, the request will be rejected
    */
-  authenticate?: (request: Request) => Promise<{
-    authenticated: true;
-    context: TAuthContext;
-  } | {
-    authenticated: false;
-    reason: string;
-  }>;
+  authenticate?: (request: Request) => Promise<
+    | {
+        authenticated: true;
+        context: TAuthContext;
+      }
+    | {
+        authenticated: false;
+        reason: string;
+      }
+  >;
   /**
    * a callback inside which you can run your logic
    * @returns a response to send back to the client
@@ -240,7 +251,7 @@ export interface IClientConfig<
   TInput extends z.ZodObject<any, any>,
   TOutput extends z.ZodObject<any, any>,
   TMethod extends HTTPMethod,
-  TPath extends string
+  TPath extends string,
 > {
   /**
    * the typescript types for the input
@@ -266,7 +277,7 @@ export interface IMakeRequestHandlerReturn<
   TInput extends z.ZodObject<any, any>,
   TOutput extends z.ZodObject<any, any>,
   TMethod extends HTTPMethod,
-  TPath extends string
+  TPath extends string,
 > {
   /**
    * config object used to generate typescript types
@@ -293,7 +304,7 @@ export const makeRequestHandler = <
   TOutput extends z.ZodObject<any, any>,
   TMethod extends HTTPMethod,
   TPath extends string,
-  TAuthContext = void
+  TAuthContext = void,
 >(
   props: IMakeRequestHandlerProps<TInput, TOutput, TMethod, TPath, TAuthContext>
 ): IMakeRequestHandlerReturn<TInput, TOutput, TMethod, TPath> => {
@@ -375,10 +386,7 @@ export const makeRequestHandler = <
       output: z.infer<TOutput>,
       options?: Partial<ResponseInit>
     ) => {
-      logger.log(
-        "debug",
-        `${loggingPrefix} success ${options?.status ?? 200}`
-      );
+      logger.log("debug", `${loggingPrefix} success ${options?.status ?? 200}`);
       return new Response(
         JSON.stringify(output),
         merge(

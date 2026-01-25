@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { buildOpenAPIPathsObject } from "./openapi";
 
@@ -203,7 +203,9 @@ describe("buildOpenAPIPathsObject", () => {
       requiresAuth: false,
     });
 
-    expect(result["/api/hello"]?.get?.description).toBe("Get a greeting message");
+    expect(result["/api/hello"]?.get?.description).toBe(
+      "Get a greeting message"
+    );
   });
 
   it("should include tags when provided", () => {
@@ -266,9 +268,8 @@ describe("buildOpenAPIPathsObject", () => {
         requiresAuth: false,
       });
 
-      const schema = (result["/api/users"]?.post?.requestBody as any)?.content?.[
-        "application/json"
-      ]?.schema;
+      const schema = (result["/api/users"]?.post?.requestBody as any)
+        ?.content?.["application/json"]?.schema;
 
       expect(schema.properties.name).toMatchObject({
         type: "string",
@@ -303,21 +304,24 @@ describe("buildOpenAPIPathsObject", () => {
   });
 
   describe("HTTP methods", () => {
-    it.each(["PUT", "PATCH"] as const)(
-      "should use request body for %s method",
-      (method) => {
-        const result = buildOpenAPIPathsObject({
-          input: z.object({ data: z.string() }),
-          output: z.object({ success: z.boolean() }),
-          method,
-          path: "/api/resource",
-          requiresAuth: false,
-        });
+    it.each([
+      "PUT",
+      "PATCH",
+    ] as const)("should use request body for %s method", (method) => {
+      const result = buildOpenAPIPathsObject({
+        input: z.object({ data: z.string() }),
+        output: z.object({ success: z.boolean() }),
+        method,
+        path: "/api/resource",
+        requiresAuth: false,
+      });
 
-        const operation = result["/api/resource"]?.[method.toLowerCase() as Lowercase<typeof method>];
-        expect(operation?.requestBody).toBeDefined();
-      }
-    );
+      const operation =
+        result["/api/resource"]?.[
+          method.toLowerCase() as Lowercase<typeof method>
+        ];
+      expect(operation?.requestBody).toBeDefined();
+    });
 
     it("should use query params for DELETE method (no request body)", () => {
       const result = buildOpenAPIPathsObject({
@@ -376,13 +380,14 @@ describe("buildOpenAPIPathsObject", () => {
         requiresAuth: false,
       });
 
-      const schema = (result["/api/users"]?.post?.requestBody as any)?.content?.[
-        "application/json"
-      ]?.schema;
+      const schema = (result["/api/users"]?.post?.requestBody as any)
+        ?.content?.["application/json"]?.schema;
 
-      expect(schema.properties.user.properties.address.properties.city).toEqual({
-        type: "string",
-      });
+      expect(schema.properties.user.properties.address.properties.city).toEqual(
+        {
+          type: "string",
+        }
+      );
     });
 
     it("should handle arrays", () => {
@@ -396,9 +401,8 @@ describe("buildOpenAPIPathsObject", () => {
         requiresAuth: false,
       });
 
-      const schema = (result["/api/items"]?.post?.requestBody as any)?.content?.[
-        "application/json"
-      ]?.schema;
+      const schema = (result["/api/items"]?.post?.requestBody as any)
+        ?.content?.["application/json"]?.schema;
 
       expect(schema.properties.tags).toEqual({
         type: "array",
@@ -417,9 +421,8 @@ describe("buildOpenAPIPathsObject", () => {
         requiresAuth: false,
       });
 
-      const schema = (result["/api/status"]?.post?.requestBody as any)?.content?.[
-        "application/json"
-      ]?.schema;
+      const schema = (result["/api/status"]?.post?.requestBody as any)
+        ?.content?.["application/json"]?.schema;
 
       expect(schema.properties.status.enum).toEqual([
         "active",
@@ -439,9 +442,8 @@ describe("buildOpenAPIPathsObject", () => {
         requiresAuth: false,
       });
 
-      const schema = (result["/api/union"]?.post?.requestBody as any)?.content?.[
-        "application/json"
-      ]?.schema;
+      const schema = (result["/api/union"]?.post?.requestBody as any)
+        ?.content?.["application/json"]?.schema;
 
       expect(schema.properties.value.anyOf).toBeDefined();
     });
@@ -457,12 +459,13 @@ describe("buildOpenAPIPathsObject", () => {
         requiresAuth: false,
       });
 
-      const schema = (result["/api/nullable"]?.post?.requestBody as any)?.content?.[
-        "application/json"
-      ]?.schema;
+      const schema = (result["/api/nullable"]?.post?.requestBody as any)
+        ?.content?.["application/json"]?.schema;
 
       // Nullable fields should allow null
-      expect(schema.properties.name.anyOf || schema.properties.name.type).toBeDefined();
+      expect(
+        schema.properties.name.anyOf || schema.properties.name.type
+      ).toBeDefined();
     });
 
     it("should handle default values", () => {
@@ -476,9 +479,8 @@ describe("buildOpenAPIPathsObject", () => {
         requiresAuth: false,
       });
 
-      const schema = (result["/api/defaults"]?.post?.requestBody as any)?.content?.[
-        "application/json"
-      ]?.schema;
+      const schema = (result["/api/defaults"]?.post?.requestBody as any)
+        ?.content?.["application/json"]?.schema;
 
       expect(schema.properties.count.default).toBe(10);
     });
@@ -494,9 +496,8 @@ describe("buildOpenAPIPathsObject", () => {
         requiresAuth: false,
       });
 
-      const schema = (result["/api/literal"]?.post?.requestBody as any)?.content?.[
-        "application/json"
-      ]?.schema;
+      const schema = (result["/api/literal"]?.post?.requestBody as any)
+        ?.content?.["application/json"]?.schema;
 
       expect(schema.properties.type.const).toBe("fixed");
     });
@@ -512,9 +513,8 @@ describe("buildOpenAPIPathsObject", () => {
         requiresAuth: false,
       });
 
-      const schema = (result["/api/record"]?.post?.requestBody as any)?.content?.[
-        "application/json"
-      ]?.schema;
+      const schema = (result["/api/record"]?.post?.requestBody as any)
+        ?.content?.["application/json"]?.schema;
 
       expect(schema.properties.metadata.type).toBe("object");
       expect(schema.properties.metadata.additionalProperties).toBeDefined();
@@ -543,8 +543,9 @@ describe("buildOpenAPIPathsObject", () => {
         requiresAuth: false,
       });
 
-      const responseSchema = (result["/api/items/{id}"]?.delete?.responses?.[200] as any)
-        ?.content?.["application/json"]?.schema;
+      const responseSchema = (
+        result["/api/items/{id}"]?.delete?.responses?.[200] as any
+      )?.content?.["application/json"]?.schema;
 
       expect(responseSchema.properties).toEqual({});
     });
@@ -579,7 +580,9 @@ describe("buildOpenAPIPathsObject", () => {
         requiresAuth: false,
       });
 
-      const parameters = result["/api/orgs/{orgId}/teams/{teamId}/users/{userId}"]?.get?.parameters;
+      const parameters =
+        result["/api/orgs/{orgId}/teams/{teamId}/users/{userId}"]?.get
+          ?.parameters;
 
       expect(parameters).toHaveLength(3);
       expect(parameters?.filter((p: any) => p.in === "path")).toHaveLength(3);
@@ -645,7 +648,9 @@ describe("buildOpenAPIPathsObject", () => {
       });
 
       const parameters = result["/api/search"]?.get?.parameters;
-      const searchParam = parameters?.find((p: any) => p.name === "search") as any;
+      const searchParam = parameters?.find(
+        (p: any) => p.name === "search"
+      ) as any;
       const pageParam = parameters?.find((p: any) => p.name === "page") as any;
 
       expect(searchParam?.required).toBe(true);
@@ -691,7 +696,9 @@ describe("buildOpenAPIPathsObject", () => {
         requiresAuth: false,
       });
 
-      expect(Object.keys(result)).toEqual(["/api/{a}/level1/{b}/level2/{c}/level3/{d}"]);
+      expect(Object.keys(result)).toEqual([
+        "/api/{a}/level1/{b}/level2/{c}/level3/{d}",
+      ]);
     });
   });
 
@@ -702,12 +709,13 @@ describe("buildOpenAPIPathsObject", () => {
         output: z.object({ results: z.array(z.string()) }),
         method: "GET",
         path: "/api/search",
-        description: "Search endpoint - supports \"quoted\" strings & special <chars>",
+        description:
+          'Search endpoint - supports "quoted" strings & special <chars>',
         requiresAuth: false,
       });
 
       expect(result["/api/search"]?.get?.description).toBe(
-        "Search endpoint - supports \"quoted\" strings & special <chars>"
+        'Search endpoint - supports "quoted" strings & special <chars>'
       );
     });
 
@@ -752,7 +760,9 @@ describe("buildOpenAPIPathsObject", () => {
       });
 
       const parameters = result["/api/items"]?.get?.parameters;
-      const activeParam = parameters?.find((p: any) => p.name === "active") as any;
+      const activeParam = parameters?.find(
+        (p: any) => p.name === "active"
+      ) as any;
 
       expect(activeParam?.schema?.type).toBe("boolean");
     });
@@ -770,9 +780,8 @@ describe("buildOpenAPIPathsObject", () => {
         requiresAuth: false,
       });
 
-      const schema = (result["/api/validate"]?.post?.requestBody as any)?.content?.[
-        "application/json"
-      ]?.schema;
+      const schema = (result["/api/validate"]?.post?.requestBody as any)
+        ?.content?.["application/json"]?.schema;
 
       expect(schema.properties.email.format).toBe("email");
       expect(schema.properties.url.format).toBe("uri");
@@ -791,9 +800,8 @@ describe("buildOpenAPIPathsObject", () => {
         requiresAuth: false,
       });
 
-      const schema = (result["/api/validate"]?.post?.requestBody as any)?.content?.[
-        "application/json"
-      ]?.schema;
+      const schema = (result["/api/validate"]?.post?.requestBody as any)
+        ?.content?.["application/json"]?.schema;
 
       expect(schema.properties.age.type).toBe("integer");
       expect(schema.properties.age.minimum).toBe(0);
@@ -832,9 +840,8 @@ describe("buildOpenAPIPathsObject", () => {
         requiresAuth: false,
       });
 
-      const schema = (result["/api/profile"]?.post?.requestBody as any)?.content?.[
-        "application/json"
-      ]?.schema;
+      const schema = (result["/api/profile"]?.post?.requestBody as any)
+        ?.content?.["application/json"]?.schema;
 
       expect(schema.properties.username.minLength).toBe(3);
       expect(schema.properties.username.maxLength).toBe(20);

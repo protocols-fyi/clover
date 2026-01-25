@@ -1,7 +1,7 @@
 import { compile } from "path-to-regexp";
-import { z } from "zod";
+import type { z } from "zod";
 import type { IClientConfig } from "./server";
-import { HTTPMethod, httpMethodSupportsRequestBody } from "./utils";
+import { type HTTPMethod, httpMethodSupportsRequestBody } from "./utils";
 
 export interface IMakeFetcherProps {
   /**
@@ -31,7 +31,7 @@ export const makeFetcher = (outerProps: IMakeFetcherProps) => {
       z.ZodObject<any, any>,
       HTTPMethod,
       string
-    >
+    >,
   >(
     props: Pick<TConfig, "input" | "method" | "path"> & {
       validator?: TConfig["output"];

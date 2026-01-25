@@ -1,5 +1,5 @@
-import { oas31 } from "openapi3-ts";
-import { Key, Path, match, pathToRegexp } from "path-to-regexp";
+import type { oas31 } from "openapi3-ts";
+import { type Key, match, type Path, pathToRegexp } from "path-to-regexp";
 
 export type OpenAPIObject = oas31.OpenAPIObject;
 export type OpenAPIPathsObject = oas31.PathsObject;
@@ -45,12 +45,12 @@ export const getParamsFromPath = (
  */
 export type PathParamNames<
   Path,
-  Acc = never
+  Acc = never,
 > = Path extends `${string}:${infer Name}/${infer R}`
   ? PathParamNames<R, Name | Acc>
   : Path extends `${string}:${infer Name}`
-  ? Name | Acc
-  : Acc;
+    ? Name | Acc
+    : Acc;
 
 /**
  * Convert Express-style path parameters to OpenAPI-style.
