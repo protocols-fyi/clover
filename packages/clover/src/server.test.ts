@@ -384,7 +384,7 @@ describe("makeRequestHandler", () => {
         return sendOutput({ greeting: `Hello, ${input.name}!` });
       },
       // Deny the user for this test
-      authenticate: async () => false,
+      authenticate: async () => ({ authenticated: false, reason: "Denied" }),
     });
 
     const response = await handler(
@@ -425,7 +425,7 @@ describe("makeRequestHandler", () => {
       method: "GET",
       path: "/api/hello",
       run: runMock,
-      authenticate: async () => false,
+      authenticate: async () => ({ authenticated: false, reason: "Denied" }),
     });
 
     await handler(new Request("http://test.com/api/hello?name=test"));
@@ -434,7 +434,7 @@ describe("makeRequestHandler", () => {
   });
 
   it("should call authenticate when provided", async () => {
-    const authMock = vi.fn().mockResolvedValue(true);
+    const authMock = vi.fn().mockResolvedValue({ authenticated: true, context: {} });
 
     const { handler } = makeRequestHandler({
       input: z.object({ name: z.string() }),
@@ -450,6 +450,89 @@ describe("makeRequestHandler", () => {
     await handler(new Request("http://test.com/api/hello?name=test"));
 
     expect(authMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("should pass auth context to run callback when authenticated", async () => {
+    const userContext = { userId: "user-123", role: "admin" };
+
+    const { handler } = makeRequestHandler({
+      input: z.object({ name: z.string() }),
+      output: z.object({ greeting: z.string(), userId: z.string() }),
+      method: "GET",
+      path: "/api/hello",
+      authenticate: async () => ({ authenticated: true, context: userContext }),
+      run: async ({ input, authContext, sendOutput }) => {
+        return sendOutput({
+          greeting: `Hello, ${input.name}!`,
+          userId: authContext!.userId,
+        });
+      },
+    });
+
+    const response = await handler(
+      new Request("http://test.com/api/hello?name=test")
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ greeting: "Hello, test!", userId: "user-123" });
+  });
+
+  it("should pass undefined authContext when no authenticate function is provided", async () => {
+    let receivedAuthContext: unknown = "not-set";
+
+    const { handler } = makeRequestHandler({
+      input: z.object({ name: z.string() }),
+      output: z.object({ greeting: z.string() }),
+      method: "GET",
+      path: "/api/hello",
+      run: async ({ input, authContext, sendOutput }) => {
+        receivedAuthContext = authContext;
+        return sendOutput({ greeting: `Hello, ${input.name}!` });
+      },
+    });
+
+    await handler(new Request("http://test.com/api/hello?name=test"));
+
+    expect(receivedAuthContext).toBeUndefined();
+  });
+
+  it("should correctly type authContext based on authenticate return type", async () => {
+    type UserContext = { userId: string; permissions: string[] };
+
+    const { handler } = makeRequestHandler<
+      z.ZodObject<{ name: z.ZodString }>,
+      z.ZodObject<{ greeting: z.ZodString; permissions: z.ZodArray<z.ZodString> }>,
+      "GET",
+      "/api/hello",
+      UserContext
+    >({
+      input: z.object({ name: z.string() }),
+      output: z.object({ greeting: z.string(), permissions: z.array(z.string()) }),
+      method: "GET",
+      path: "/api/hello",
+      authenticate: async () => ({
+        authenticated: true,
+        context: { userId: "user-123", permissions: ["read", "write"] },
+      }),
+      run: async ({ input, authContext, sendOutput }) => {
+        return sendOutput({
+          greeting: `Hello, ${input.name}!`,
+          permissions: authContext.permissions,
+        });
+      },
+    });
+
+    const response = await handler(
+      new Request("http://test.com/api/hello?name=test")
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({
+      greeting: "Hello, test!",
+      permissions: ["read", "write"],
+    });
   });
 
   it("should allow an explicit error response", async () => {
@@ -674,7 +757,7 @@ describe("makeRequestHandler", () => {
         output: z.object({ greeting: z.string() }),
         method: "GET",
         path: "/api/hello",
-        authenticate: async () => false,
+        authenticate: async () => ({ authenticated: false, reason: "Invalid token" }),
         run: async ({ sendOutput }) => {
           return sendOutput({ greeting: "Hello, test!" });
         },
@@ -684,9 +767,10 @@ describe("makeRequestHandler", () => {
 
       expect(logs?.[1]).toEqual({
         level: "debug",
-        message: "Handler GET /api/hello authentication check returned false",
+        message: "Handler GET /api/hello authentication failed: Invalid token",
         meta: {
           url: "http://test.com/api/hello?name=test",
+          reason: "Invalid token",
         },
       });
     });
