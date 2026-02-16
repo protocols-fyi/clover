@@ -3,6 +3,9 @@ export { type ILogger, type LogLevel, setLogger } from "./logger";
 export {
   type IMakeRequestHandlerProps,
   type IMakeRequestHandlerReturn,
+  type RunCallbackProps,
+  type SendErrorFn,
+  type SendOutputFn,
   makeRequestHandler,
 } from "./server";
 export type {

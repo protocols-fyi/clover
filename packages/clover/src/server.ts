@@ -205,46 +205,7 @@ export interface IMakeRequestHandlerProps<
    * a callback inside which you can run your logic
    * @returns a response to send back to the client
    */
-  run: ({
-    request,
-    input,
-    authContext,
-    sendOutput,
-    sendError,
-  }: {
-    /**
-     * the raw request, do whatever you want with it
-     */
-    request: Request;
-    /**
-     * a helper with the input data
-     */
-    input: z.infer<TInput>;
-    /**
-     * the context returned from the authenticate function (void if no auth configured)
-     */
-    authContext: TAuthContext;
-    /**
-     * @param output - the output data
-     * @param options Request options
-     * @returns a helper to send the output
-     */
-    sendOutput: (
-      output: z.infer<TOutput>,
-      options?: Partial<ResponseInit>
-    ) => Promise<Response>;
-    /**
-     * @param status - the status code
-     * @param message - the error message
-     * @param data - any additional data
-     * @param options - optional response options (headers, statusText, etc.)
-     * @returns a helper to send the error response
-     */
-    sendError: (
-      { status, message, data }: { status: number } & ErrorResponse,
-      options?: Partial<Omit<ResponseInit, "status">>
-    ) => Promise<Response>;
-  }) => Promise<Response>;
+  run: (props: RunCallbackProps<TInput, TOutput, TAuthContext>) => Promise<Response>;
 }
 
 export interface IClientConfig<
@@ -293,11 +254,103 @@ export interface IMakeRequestHandlerReturn<
   handler: (request: Request) => Promise<Response>;
 }
 
+// ============================================================================
+// Public Type Exports
+// ============================================================================
+
 export const errorResponseSchema = z.object({
   message: z.string(),
   data: z.record(z.string(), z.any()).optional(),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;
+
+/**
+ * Function type for sending successful responses.
+ * Useful when building custom response wrappers.
+ *
+ * @example
+ * ```typescript
+ * import type { SendOutputFn } from '@protocols-fyi/clover';
+ *
+ * // Wrap sendOutput to add custom headers
+ * const wrappedSendOutput: SendOutputFn<MyOutputSchema> = async (output, options) => {
+ *   const headers = new Headers(options?.headers ?? {});
+ *   headers.set('X-Custom-Header', 'value');
+ *   return sendOutput(output, { ...options, headers });
+ * };
+ * ```
+ */
+export type SendOutputFn<TOutput extends z.ZodObject<any, any>> = (
+  output: z.infer<TOutput>,
+  options?: Partial<ResponseInit>
+) => Promise<Response>;
+
+/**
+ * Function type for sending error responses.
+ * Useful when building custom error handlers.
+ *
+ * @example
+ * ```typescript
+ * import type { SendErrorFn } from '@protocols-fyi/clover';
+ *
+ * // Wrap sendError to add tracking headers
+ * const wrappedSendError: SendErrorFn = async (error, options) => {
+ *   const headers = new Headers(options?.headers ?? {});
+ *   headers.set('X-Request-ID', requestId);
+ *   return sendError(error, { ...options, headers });
+ * };
+ * ```
+ */
+export type SendErrorFn = (
+  error: { status: number; message: string; data?: Record<string, unknown> },
+  options?: Partial<Omit<ResponseInit, "status">>
+) => Promise<Response>;
+
+/**
+ * The props passed to the run callback in makeRequestHandler.
+ * Use this type when building wrappers or extending handler functionality.
+ *
+ * @example
+ * ```typescript
+ * import type { RunCallbackProps } from '@protocols-fyi/clover';
+ *
+ * // Extend with custom auth context
+ * type MyRunProps<TInput, TOutput> = RunCallbackProps<TInput, TOutput, void> & {
+ *   requestId: string;
+ *   supabase: SupabaseClient;
+ * };
+ * ```
+ */
+export type RunCallbackProps<
+  TInput extends z.ZodObject<any, any>,
+  TOutput extends z.ZodObject<any, any>,
+  TAuthContext = void
+> = {
+  /**
+   * The raw request object
+   */
+  request: Request;
+
+  /**
+   * The parsed and validated input data
+   */
+  input: z.infer<TInput>;
+
+  /**
+   * The context returned from the authenticate function (void if no auth configured)
+   */
+  authContext: TAuthContext;
+
+  /**
+   * Helper to send a successful response
+   */
+  sendOutput: SendOutputFn<TOutput>;
+
+  /**
+   * Helper to send an error response
+   */
+  sendError: SendErrorFn;
+};
 
 export const makeRequestHandler = <
   TInput extends z.ZodObject<any, any>,
