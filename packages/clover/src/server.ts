@@ -237,13 +237,17 @@ export interface IMakeRequestHandlerProps<
      * @param status - the status code
      * @param message - the error message
      * @param data - any additional data
-     * @returns a helper to send the output
+     * @param options - optional response options (headers, statusText, etc.)
+     * @returns a helper to send the error response
      */
-    sendError: ({
-      status,
-      message,
-      data,
-    }: { status: number } & ErrorResponse) => Promise<Response>;
+    sendError: (
+      {
+        status,
+        message,
+        data,
+      }: { status: number } & ErrorResponse,
+      options?: Partial<Omit<ResponseInit, "status">>
+    ) => Promise<Response>;
   }) => Promise<Response>;
 }
 
@@ -401,18 +405,27 @@ export const makeRequestHandler = <
       );
     };
 
-    const sendError = async ({
-      status,
-      message,
-      data,
-    }: { status: number } & ErrorResponse) => {
-      logger.log("debug", `${loggingPrefix} error ${status}`);
-      return new Response(JSON.stringify({ message, data }), {
+    const sendError = async (
+      {
         status,
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+        message,
+        data,
+      }: { status: number } & ErrorResponse,
+      options?: Partial<Omit<ResponseInit, "status">>
+    ) => {
+      logger.log("debug", `${loggingPrefix} error ${status}`);
+      return new Response(
+        JSON.stringify({ message, data }),
+        merge(
+          {
+            status,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+          options
+        )
+      );
     };
 
     // run the user's code
