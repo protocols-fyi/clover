@@ -1,6 +1,6 @@
 import { compile } from "path-to-regexp";
 import type { z } from "zod";
-import type { IClientConfig } from "./server";
+import type { IClientConfig } from "./types";
 import { type HTTPMethod, httpMethodSupportsRequestBody } from "./utils";
 
 export interface IMakeFetcherProps {

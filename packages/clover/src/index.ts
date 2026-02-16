@@ -1,13 +1,15 @@
 export { type IMakeFetcherProps, makeFetcher } from "./client";
 export { type ILogger, type LogLevel, setLogger } from "./logger";
-export {
-  type IMakeRequestHandlerProps,
-  type IMakeRequestHandlerReturn,
-  type RunCallbackProps,
-  type SendErrorFn,
-  type SendOutputFn,
-  makeRequestHandler,
-} from "./server";
+export { makeRequestHandler } from "./server";
+export type {
+  ErrorResponse,
+  IClientConfig,
+  IMakeRequestHandlerProps,
+  IMakeRequestHandlerReturn,
+  RunCallbackProps,
+  SendErrorFn,
+  SendOutputFn,
+} from "./types";
 export type {
   OpenAPIObject,
   OpenAPIPathItemObject,

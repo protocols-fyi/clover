@@ -2,7 +2,8 @@ import type { oas31 } from "openapi3-ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ZodError, z } from "zod";
 import { setLogger } from "./logger";
-import { errorResponseSchema, makeRequestHandler } from "./server";
+import { makeRequestHandler } from "./server";
+import { errorResponseSchema } from "./types";
 
 function getParam(
   parameters: (oas31.ParameterObject | oas31.ReferenceObject)[] | undefined,
