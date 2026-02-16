@@ -241,11 +241,7 @@ export interface IMakeRequestHandlerProps<
      * @returns a helper to send the error response
      */
     sendError: (
-      {
-        status,
-        message,
-        data,
-      }: { status: number } & ErrorResponse,
+      { status, message, data }: { status: number } & ErrorResponse,
       options?: Partial<Omit<ResponseInit, "status">>
     ) => Promise<Response>;
   }) => Promise<Response>;
@@ -406,11 +402,7 @@ export const makeRequestHandler = <
     };
 
     const sendError = async (
-      {
-        status,
-        message,
-        data,
-      }: { status: number } & ErrorResponse,
+      { status, message, data }: { status: number } & ErrorResponse,
       options?: Partial<Omit<ResponseInit, "status">>
     ) => {
       logger.log("debug", `${loggingPrefix} error ${status}`);
