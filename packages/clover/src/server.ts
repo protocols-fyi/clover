@@ -4,8 +4,8 @@ import { getLogger, type ILogger } from "./logger";
 import { buildOpenAPIPathsObject } from "./openapi";
 import { commonReponses } from "./responses";
 import {
-  errorResponseSchema,
   type ErrorResponse,
+  errorResponseSchema,
   type IMakeRequestHandlerProps,
   type IMakeRequestHandlerReturn,
 } from "./types";
@@ -252,14 +252,10 @@ export const makeRequestHandler = <
       const parsedOutput = await props.output.safeParseAsync(output);
 
       if (!parsedOutput.success) {
-        logger.log(
-          "error",
-          `${loggingPrefix} output validation failed`,
-          {
-            validationError: parsedOutput.error,
-            url: request.url,
-          }
-        );
+        logger.log("error", `${loggingPrefix} output validation failed`, {
+          validationError: parsedOutput.error,
+          url: request.url,
+        });
         return commonReponses[500].response(
           new Error("Response validation failed")
         );

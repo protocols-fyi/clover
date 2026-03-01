@@ -96,7 +96,12 @@ const complexData = {
   active: true,
   role: "admin",
   tags: ["a", "b", "c"],
-  address: { street: "123 Main St", city: "Springfield", zip: "12345", country: "US" },
+  address: {
+    street: "123 Main St",
+    city: "Springfield",
+    zip: "12345",
+    country: "US",
+  },
   preferences: { theme: "dark", notifications: true, language: "en" },
 };
 
@@ -122,15 +127,21 @@ describe("Zod parsing cost: raw safeParse baseline", () => {
 
 describe("Full handler (Request → Response)", () => {
   bench("simple schema (1 field)", async () => {
-    await simpleHandler(postRequest("http://localhost/bench/simple", simpleData));
+    await simpleHandler(
+      postRequest("http://localhost/bench/simple", simpleData)
+    );
   });
 
   bench("medium schema (5 fields)", async () => {
-    await mediumHandler(postRequest("http://localhost/bench/medium", mediumData));
+    await mediumHandler(
+      postRequest("http://localhost/bench/medium", mediumData)
+    );
   });
 
   bench("complex schema (nested, 10+ fields)", async () => {
-    await complexHandler(postRequest("http://localhost/bench/complex", complexData));
+    await complexHandler(
+      postRequest("http://localhost/bench/complex", complexData)
+    );
   });
 });
 
@@ -144,8 +155,6 @@ describe("Handler without Zod (no-input baseline)", () => {
   }).handler;
 
   bench("empty schema handler", async () => {
-    await noInputHandler(
-      postRequest("http://localhost/bench/noinput", {}),
-    );
+    await noInputHandler(postRequest("http://localhost/bench/noinput", {}));
   });
 });

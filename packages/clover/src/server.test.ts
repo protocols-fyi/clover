@@ -2242,7 +2242,10 @@ describe("handler wrapper pattern", () => {
         path: "/test",
         run: async ({ sendOutput }) => {
           // Deliberately send extra fields beyond the schema
-          return sendOutput({ name: "Alice", secret: "should-be-stripped" } as any);
+          return sendOutput({
+            name: "Alice",
+            secret: "should-be-stripped",
+          } as any);
         },
       });
 
@@ -2281,7 +2284,10 @@ describe("handler wrapper pattern", () => {
 
       expect(response.status).toBe(500);
 
-      const errorLog = logs.find((l) => l.level === "error" && l.message.includes("output validation failed"));
+      const errorLog = logs.find(
+        (l) =>
+          l.level === "error" && l.message.includes("output validation failed")
+      );
       expect(errorLog).toBeDefined();
       expect(errorLog?.meta.validationError).toBeDefined();
     });
@@ -2310,7 +2316,10 @@ describe("handler wrapper pattern", () => {
 
       expect(response.status).toBe(500);
 
-      const errorLog = logs.find((l) => l.level === "error" && l.message.includes("output validation failed"));
+      const errorLog = logs.find(
+        (l) =>
+          l.level === "error" && l.message.includes("output validation failed")
+      );
       expect(errorLog).toBeDefined();
     });
   });
@@ -2338,7 +2347,10 @@ describe("handler wrapper pattern", () => {
       const data = await response.json();
 
       expect(response.status).toBe(422);
-      expect(data).toEqual({ message: "Validation failed", data: { field: "email" } });
+      expect(data).toEqual({
+        message: "Validation failed",
+        data: { field: "email" },
+      });
       expect(data).not.toHaveProperty("extra");
     });
   });
