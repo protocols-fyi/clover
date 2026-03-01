@@ -14,16 +14,17 @@
     "test:ui": "turbo run test:ui"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.3.12",
+    "@biomejs/biome": "^2.4.4",
     "@changesets/cli": "^2.29.8",
-    "turbo": "^2.7.6"
+    "turbo": "^2.8.12"
   },
   "packageManager": "pnpm@9.4.0",
   "name": "cardboard",
   "pnpm": {
     "overrides": {
       "brace-expansion@^1": "^1.1.12",
-      "brace-expansion@^2": "^2.0.2"
+      "brace-expansion@^2": "^2.0.2",
+      "rollup": ">=4.59.0"
     }
   }
 }
