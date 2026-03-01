@@ -12,6 +12,7 @@
     "test:watch": "turbo run test:watch",
     "test:coverage": "turbo run test:coverage",
     "test:ui": "turbo run test:ui",
+    "typecheck": "turbo run typecheck",
     "prepare": "husky"
   },
   "devDependencies": {
