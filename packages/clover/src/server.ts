@@ -3,10 +3,11 @@ import type { z } from "zod";
 import { getLogger, type ILogger } from "./logger";
 import { buildOpenAPIPathsObject } from "./openapi";
 import { commonReponses } from "./responses";
-import type {
-  ErrorResponse,
-  IMakeRequestHandlerProps,
-  IMakeRequestHandlerReturn,
+import {
+  type ErrorResponse,
+  errorResponseSchema,
+  type IMakeRequestHandlerProps,
+  type IMakeRequestHandlerReturn,
 } from "./types";
 import {
   getKeysFromPathPattern,
@@ -248,9 +249,21 @@ export const makeRequestHandler = <
       output: z.infer<TOutput>,
       options?: Partial<ResponseInit>
     ) => {
+      const parsedOutput = await props.output.safeParseAsync(output);
+
+      if (!parsedOutput.success) {
+        logger.log("error", `${loggingPrefix} output validation failed`, {
+          validationError: parsedOutput.error,
+          url: request.url,
+        });
+        return commonReponses[500].response(
+          new Error("Response validation failed")
+        );
+      }
+
       logger.log("debug", `${loggingPrefix} success ${options?.status ?? 200}`);
       return new Response(
-        JSON.stringify(output),
+        JSON.stringify(parsedOutput.data),
         merge(
           {
             status: 200,
@@ -267,9 +280,25 @@ export const makeRequestHandler = <
       { status, message, data }: { status: number } & ErrorResponse,
       options?: Partial<Omit<ResponseInit, "status">>
     ) => {
+      const parsedError = errorResponseSchema.safeParse({ message, data });
+
+      if (!parsedError.success) {
+        logger.log(
+          "error",
+          `${loggingPrefix} error response validation failed`,
+          {
+            validationError: parsedError.error,
+            url: request.url,
+          }
+        );
+        return commonReponses[500].response(
+          new Error("Error response validation failed")
+        );
+      }
+
       logger.log("debug", `${loggingPrefix} error ${status}`);
       return new Response(
-        JSON.stringify({ message, data }),
+        JSON.stringify(parsedError.data),
         merge(
           {
             status,

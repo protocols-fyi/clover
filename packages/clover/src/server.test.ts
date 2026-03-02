@@ -2232,4 +2232,126 @@ describe("handler wrapper pattern", () => {
     expect(response.status).toBe(200);
     expect(data.message).toBe("Hi Jane");
   });
+
+  describe("output validation", () => {
+    it("should strip extra fields from the output", async () => {
+      const { handler } = makeRequestHandler({
+        input: z.object({}),
+        output: z.object({ name: z.string() }),
+        method: "POST",
+        path: "/test",
+        run: async ({ sendOutput }) => {
+          // Deliberately send extra fields beyond the schema
+          return sendOutput({
+            name: "Alice",
+            secret: "should-be-stripped",
+          } as any);
+        },
+      });
+
+      const response = await handler(
+        new Request("http://test.com/test", { method: "POST" })
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data).toEqual({ name: "Alice" });
+      expect(data).not.toHaveProperty("secret");
+    });
+
+    it("should return 500 and log error when output does not match the schema", async () => {
+      const logs: { level: string; message: string; meta: any }[] = [];
+      setLogger({
+        log: (level, message, meta) => {
+          logs.push({ level, message, meta });
+        },
+      });
+
+      const { handler } = makeRequestHandler({
+        input: z.object({}),
+        output: z.object({ name: z.string(), age: z.number() }),
+        method: "POST",
+        path: "/test",
+        run: async ({ sendOutput }) => {
+          // Missing required field 'age'
+          return sendOutput({ name: "Alice" } as any);
+        },
+      });
+
+      const response = await handler(
+        new Request("http://test.com/test", { method: "POST" })
+      );
+
+      expect(response.status).toBe(500);
+
+      const errorLog = logs.find(
+        (l) =>
+          l.level === "error" && l.message.includes("output validation failed")
+      );
+      expect(errorLog).toBeDefined();
+      expect(errorLog?.meta.validationError).toBeDefined();
+    });
+
+    it("should return 500 and log error when output has wrong types", async () => {
+      const logs: { level: string; message: string; meta: any }[] = [];
+      setLogger({
+        log: (level, message, meta) => {
+          logs.push({ level, message, meta });
+        },
+      });
+
+      const { handler } = makeRequestHandler({
+        input: z.object({}),
+        output: z.object({ count: z.number() }),
+        method: "POST",
+        path: "/test",
+        run: async ({ sendOutput }) => {
+          return sendOutput({ count: "not-a-number" } as any);
+        },
+      });
+
+      const response = await handler(
+        new Request("http://test.com/test", { method: "POST" })
+      );
+
+      expect(response.status).toBe(500);
+
+      const errorLog = logs.find(
+        (l) =>
+          l.level === "error" && l.message.includes("output validation failed")
+      );
+      expect(errorLog).toBeDefined();
+    });
+  });
+
+  describe("error response validation", () => {
+    it("should strip extra fields from error responses", async () => {
+      const { handler } = makeRequestHandler({
+        input: z.object({}),
+        output: z.object({}),
+        method: "POST",
+        path: "/test",
+        run: async ({ sendError }) => {
+          return sendError({
+            status: 422,
+            message: "Validation failed",
+            data: { field: "email" },
+            extra: "should-be-stripped",
+          } as any);
+        },
+      });
+
+      const response = await handler(
+        new Request("http://test.com/test", { method: "POST" })
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data).toEqual({
+        message: "Validation failed",
+        data: { field: "email" },
+      });
+      expect(data).not.toHaveProperty("extra");
+    });
+  });
 });

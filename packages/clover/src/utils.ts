@@ -1,5 +1,5 @@
 import type { oas31 } from "openapi3-ts";
-import { type Key, match, type Path, pathToRegexp } from "path-to-regexp";
+import { match, parse } from "path-to-regexp";
 
 export type OpenAPIObject = oas31.OpenAPIObject;
 export type OpenAPIPathsObject = oas31.PathsObject;
@@ -19,10 +19,11 @@ export const httpMethodSupportsRequestBody: Record<HTTPMethod, boolean> = {
   DELETE: false,
 };
 
-export const getKeysFromPathPattern = (pattern: Path): Key[] => {
-  const keys: Key[] = [];
-  pathToRegexp(pattern, keys);
-  return keys;
+export const getKeysFromPathPattern = (pattern: string): { name: string }[] => {
+  const { tokens } = parse(pattern);
+  return tokens
+    .filter((t): t is { type: "param"; name: string } => t.type === "param")
+    .map((t) => ({ name: t.name }));
 };
 
 export const getParamsFromPath = (

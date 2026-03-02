@@ -37,9 +37,17 @@ export const makeFetcher = (outerProps: IMakeFetcherProps) => {
       validator?: TConfig["output"];
     }
   ): Promise<z.infer<TConfig["output"]>> => {
-    // substitute any path params using the input
-    const pathSubstitutor = compile(props.path);
-    const substitutedPath = pathSubstitutor(props.input);
+    // Extract only string values for path param substitution.
+    // Path params are always strings since they come from URL segments,
+    // but the input object may also contain non-string body/query fields.
+    const pathParams: Record<string, string> = {};
+    for (const [key, value] of Object.entries(props.input)) {
+      if (typeof value === "string") {
+        pathParams[key] = value;
+      }
+    }
+    const pathSubstitutor = compile<Record<string, string>>(props.path);
+    const substitutedPath = pathSubstitutor(pathParams);
 
     // create a ful url to the endpoint
     const url = new URL(substitutedPath, outerProps.baseUrl);
